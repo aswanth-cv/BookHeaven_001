@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Login - BookHaven</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+   <link rel="stylesheet" href="/styles/admin/adminLogin.css">
+      
+  </head>
+  <body
+    class="paper-texture d-flex align-items-center justify-content-center min-vh-100 py-3"
+  >
+    <div class="container">
+      <div class="login-container mx-auto bg-white row">
+        <!-- Left image side -->
+        <div class="col-md-5 p-0 image-side d-none d-md-block">
+          <div class="overlay">
+            <div class="text-white">
+              <h2 class="h3 fw-bold mb-1">Admin Portal</h2>
+              <p class="mb-0 small">Manage your BookHaven bookstore</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right form side -->
+        <div class="col-12 col-md-7 form-side">
+          <div class="text-center mb-4">
+            <div class="d-flex align-items-center justify-content-center mb-2">
+              <img
+                src="../assets/harryPotter.jpeg"
+                alt="BookHaven Logo"
+                class="me-2 "width="40" height="40"
+              />
+              <span class="logo-text fs-4">BookHaven</span>
+              <span class="admin-badge ms-2">ADMIN</span>
+            </div>
+            <h2 class="fw-bold h4">Admin Login</h2>
+            <p class="text-muted small mb-3">Access dashboard and controls</p>
+          </div>
+
+          <form id="adminLogin" method="post">
+            <div class="compact-mb">
+              <label for="email" class="form-label">Admin Email</label>
+              <input
+                type="email"
+                name="email"
+                class="form-control form-control-sm"
+                id="email"
+                placeholder="Enter admin email"
+              />
+              <div id="emailError" class="text-danger small mt-1"></div>
+            </div>
+            <div class="compact-mb">
+              <label for="password" class="form-label">Password</label>
+              <div class="input-group">
+                <input
+                  type="password"
+                  name="password"
+                  class="form-control form-control-sm"
+                  id="password"
+                  placeholder="Enter your password"
+                />
+                <button class="btn btn-outline-secondary btn-sm toggle-password" type="button" tabindex="-1">
+                  <i class="ri-eye-off-line"></i>
+                </button>
+              </div>
+              <div id="passwordError" class="text-danger small mt-1"></div>
+            </div>
+
+            <a href="/admin/forgot-password" class="forgot-password text-decoration-none"
+              >Forgot password?</a
+            >
+
+            <button
+              type="submit"
+              class="btn btn-primary btn-sm w-100 mb-2 py-2"
+            >
+              Login to Admin
+            </button>
+            
+            <div class="admin-notify text-center mt-3">
+              <i class="ri-shield-check-line me-1"></i> This portal is for authorized administrators only
+            </div>
+          </form>
+
+          <div class="text-center mt-3">
+            <p class="small text-muted mb-0">
+              Need customer access?
+              <a href="/login" class="text-decoration-none fw-medium">Customer Login</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Password toggle functionality
+      document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', function() {
+          const input = this.previousElementSibling;
+          const icon = this.querySelector('i');
+
+          if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('ri-eye-off-line', 'ri-eye-line');
+          } else {
+            input.type = 'password';
+            icon.classList.replace('ri-eye-line', 'ri-eye-off-line');
+          }
+        });
+      });
+
+      document
+        .getElementById("adminLogin")
+        .addEventListener("submit", async (event) => {
+          event.preventDefault();
+
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value.trim();
+
+          document.getElementById("emailError").textContent = "";
+          document.getElementById("passwordError").textContent = "";
+
+          let isValid = true;
+
+          if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+            document.getElementById("emailError").textContent =
+              "Valid email is required.";
+            isValid = false;
+          }
+
+          if (!password || password.length < 6) {
+            document.getElementById("passwordError").textContent =
+              "Password must be at least 6 characters.";
+            isValid = false;
+          }
+
+          if (isValid) {
+            try {
+              const response = await fetch("/admin/adminLogin", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  email,
+                  password,
+                }),
+              });
+
+              const result = await response.json();
+              if (result.success) {
+                Swal.fire({
+                  icon: "success",
+                  title: "Admin Login Successful",
+                  text: result.message || 'Welcome to BookHaven Admin',
+                  confirmButtonText: "Go to Dashboard",
+                })
+                 .then(() => {
+                  window.location.href = "/admin/adminDashboard";
+                });
+              } else {
+                Swal.fire({
+                  icon: "error",
+                  title: "Admin Login Error",
+                  text: result.message || "Invalid credentials or insufficient permissions",
+                });
+              }
+            } catch (error) {
+              console.log("Admin login error", error);
+              Swal.fire({
+                icon: "error",
+                title: "Server Error",
+                text: "Server not responding. Try again later.",
+              });
+            }
+          }
+        });
+    </script>
+  </body>
+</html>

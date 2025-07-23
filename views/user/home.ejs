@@ -1,0 +1,505 @@
+<%- include("../partials/user/header") %>
+
+<!-- Hero Section -->
+<section class="hero-section">
+  <div class="container">
+    <div class="hero-content text-white">
+      <h1 class="display-4 fw-bold mb-4">Discover Stories That Find You</h1>
+      <p class="fs-5 mb-4">WHERE STORIES FIND LOST SOULS</p>
+      <div class="d-flex flex-column flex-sm-row gap-3">
+        <!-- <a href="/shopPage" class="btn btn-light px-4 py-2 fw-medium">Shop Now</a> -->
+        <a href="/shopPage" class="btn btn-outline-light px-4 py-2 fw-medium">Explore Collections</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Featured Categories -->
+<section class="py-5 bg-white">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="fs-1 fw-bold">Browse Categories</h2>
+      <a href="/shopPage" class="text-dark text-decoration-none hover-dark">View All</a>
+    </div>
+    <div class="row g-4">
+      <% if (categories && categories.length > 0) { %>
+        <% categories.slice(0, 3).forEach(category => { %>
+          <div class="col-md-4">
+            <div class="category-card shadow-sm">
+              <img src="<%= category.image %>" alt="<%= category.name %>" />
+              <div class="category-overlay">
+                <h3 class="text-white fs-4 fw-bold mb-2"><%= category.name %></h3>
+                <a href="/shop?category=<%= category._id %>" class="text-white text-decoration-underline">Explore</a>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <div class="col-12 text-center">
+          <p>No categories available.</p>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<!-- Bestsellers (Based on Stock Count) -->
+<section class="py-5 bg-light">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="fs-1 fw-bold">Bestsellers</h2>
+      <a href="/shopPage" class="text-dark text-decoration-none hover-dark">View All</a>
+    </div>
+    <div class="row g-4">
+      <% if (topSellingProducts && topSellingProducts.length > 0) { %>
+        <% topSellingProducts.slice(0, 4).forEach(product => { %>
+          <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="product-card bg-white h-100">
+              <div class="product-image-container">
+                <% if (product.isNew) { %>
+                  <span class="product-tag">New</span>
+                <% } %>
+                <% if (product.activeOffer) { %>
+                  <span class="product-tag bg-danger">
+                    <%= Math.round(product.discountPercentage) %>% OFF
+                  </span>
+                <% } %>
+                <a href="/products/<%= product._id %>" class="text-decoration-none">
+                  <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %>" class="product-image" />
+                </a>
+              </div>
+              <div class="p-3">
+                <h3 class="fs-5 fw-semibold mb-1">
+                  <a href="/products/<%= product._id %>" class="text-dark text-decoration-none"><%= product.title %></a>
+                </h3>
+                <p class="text-muted small mb-2"><%= product.author %></p>
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <% if (product.activeOffer) { %>
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                      </div>
+                      <small class="text-success d-block"><%= product.activeOffer.title %></small>
+                    <% } else { %>
+                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                    <% } %>
+                  </div>
+                  <div class="d-flex gap-2 align-items-center">
+                    <button class="btn-wishlist-home" data-product-id="<%= product._id %>">
+                      <i class="ri-heart-line"></i>
+                    </button>
+                    <button class="add-to-cart border-0" data-product-id="<%= product._id %>">
+                      <i class="ri-add-line"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <div class="col-12 text-center">
+          <p>No bestselling products available.</p>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<!-- New Arrivals (Based on Date Added) -->
+<section class="py-5 bg-white">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="fs-1 fw-bold">New Arrivals</h2>
+      <a href="/shopPage" class="text-dark text-decoration-none hover-dark">View All</a>
+    </div>
+    <div class="row g-4">
+      <% if (newArrivals && newArrivals.length > 0) { %>
+        <% newArrivals.slice(0, 4).forEach(product => { %>
+          <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="product-card bg-white h-100">
+              <div class="product-image-container">
+                <% if (product.isNew) { %>
+                  <span class="product-tag">New</span>
+                <% } %>
+                <% if (product.activeOffer) { %>
+                  <span class="product-tag bg-danger">
+                    <%= Math.round(product.discountPercentage) %>% OFF
+                  </span>
+                <% } %>
+                <a href="/products/<%= product._id %>" class="text-decoration-none">
+                  <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %>" class="product-image" />
+                </a>
+              </div>
+              <div class="p-3">
+                <h3 class="fs-5 fw-semibold mb-1">
+                  <a href="/products/<%= product._id %>" class="text-dark text-decoration-none"><%= product.title %></a>
+                </h3>
+                <p class="text-muted small mb-2"><%= product.author %></p>
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <% if (product.activeOffer) { %>
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                      </div>
+                      <small class="text-success d-block"><%= product.activeOffer.title %></small>
+                    <% } else { %>
+                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                    <% } %>
+                  </div>
+                  <div class="d-flex gap-2 align-items-center">
+                    <button class="btn-wishlist-home" data-product-id="<%= product._id %>">
+                      <i class="ri-heart-line"></i>
+                    </button>
+                    <button class="add-to-cart border-0" data-product-id="<%= product._id %>">
+                      <i class="ri-add-line"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <div class="col-12 text-center">
+          <p>No new arrivals available.</p>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonials (unchanged) -->
+<section class="py-5 bg-light">
+  <div class="container">
+    <h2 class="fs-1 fw-bold text-center mb-5">Reader Stories</h2>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="testimonial-card bg-white h-100">
+          <div class="mb-3">
+            <i class="ri-double-quotes-l fs-2 text-dark"></i>
+          </div>
+          <p class="text-muted mb-4">
+            "BookHaven has completely transformed my reading experience. Their curated selections always seem to find me at just the right moment in my life."
+          </p>
+          <div class="d-flex align-items-center">
+            <div class="user-avatar">
+              <i class="ri-user-line"></i>
+            </div>
+            <div class="ms-3">
+              <h4 class="fs-6 fw-semibold mb-0">Emily Richardson</h4>
+              <p class="small text-muted mb-0">Literature Professor</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="testimonial-card bg-white h-100">
+          <div class="mb-3">
+            <i class="ri-double-quotes-l fs-2 text-dark"></i>
+          </div>
+          <p class="text-muted mb-4">
+            "I've discovered authors I never would have found elsewhere. Each book feels personally selected for my soul. The quality and curation are unmatched."
+          </p>
+          <div class="d-flex align-items-center">
+            <div class="user-avatar">
+              <i class="ri-user-line"></i>
+            </div>
+            <div class="ms-3">
+              <h4 class="fs-6 fw-semibold mb-0">Michael Thornton</h4>
+              <p class="small text-muted mb-0">Avid Reader</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="testimonial-card bg-white h-100">
+          <div class="mb-3">
+            <i class="ri-double-quotes-l fs-2 text-dark"></i>
+          </div>
+          <p class="text-muted mb-4">
+            "The minimalist aesthetic and thoughtful selection process make BookHaven stand out. It's not just a bookstore; it's a sanctuary for lost souls seeking stories."
+          </p>
+          <div class="d-flex align-items-center">
+            <div class="user-avatar">
+              <i class="ri-user-line"></i>
+            </div>
+            <div class="ms-3">
+              <h4 class="fs-6 fw-semibold mb-0">Sophia Nguyen</h4>
+              <p class="small text-muted mb-0">Book Blogger</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Newsletter (unchanged) -->
+<section class="newsletter-section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-6 text-center">
+        <h2 class="fs-1 fw-bold mb-3">Join Our Literary Journey</h2>
+        <p class="text-white-50 mb-4">
+          Subscribe to receive curated reading recommendations, author interviews, and exclusive offers.
+        </p>
+        <form class="d-flex flex-column flex-sm-row gap-3 mb-3 mx-auto" style="max-width: 500px">
+          <input type="email" class="form-control" placeholder="Your email address" style="border-radius: 0.5rem" />
+          <button type="submit" class="btn btn-light fw-medium" style="border-radius: 0.5rem; white-space: nowrap">
+            Subscribe
+          </button>
+        </form>
+        <p class="small text-white-50">
+          By subscribing, you agree to our Privacy Policy and consent to receive updates from BookHaven.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include("../partials/user/footer") %>
+
+<style>
+  .btn-wishlist-home {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background-color: #fff;
+    color: #000;
+    border: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+
+  .btn-wishlist-home:hover {
+    background-color: #000;
+    color: #fff;
+  }
+
+  .btn-wishlist-home.wishlisted {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+  }
+
+  .btn-wishlist-home.wishlisted:hover {
+    background-color: #c82333;
+    border-color: #c82333;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Cart and Wishlist functionality
+    const cartCountElement = document.querySelector('.cart-count');
+    const wishlistCountElement = document.querySelector('.wishlist-count');
+
+    // Add to cart functionality
+    document.querySelectorAll('.add-to-cart').forEach(button => {
+      button.addEventListener('click', async function() {
+        const productId = this.dataset.productId;
+
+        try {
+          const response = await fetch('/cart/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId, quantity: 1 })
+          });
+
+          // Handle both success and error responses
+          const result = await response.json();
+          console.log('Response status:', response.status);
+          console.log('Response result:', result);
+
+          // Check if it's a 401 Unauthorized or authentication error
+          if (response.status === 401 || !result.success) {
+            // Debug logging
+            console.log('Authentication error detected');
+            console.log('Status:', response.status);
+            console.log('Result:', result);
+
+            // Show authentication required message and redirect
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'error',
+              title: result.message || 'Please log in to add items to your cart',
+              showConfirmButton: false,
+              timer: 2000
+            }).then(() => {
+              console.log('Redirecting to login...');
+              window.location.href = '/login';
+            });
+          } else if (result.success) {
+            if (cartCountElement) {
+              cartCountElement.textContent = result.cartCount;
+              cartCountElement.dataset.count = result.cartCount;
+            }
+
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'success',
+              title: result.message,
+              showConfirmButton: false,
+              timer: 1500
+            });
+          } else {
+            // Debug logging
+            console.log('Cart error response:', result);
+            console.log('Message:', result.message);
+            console.log('RequiresAuth:', result.requiresAuth);
+
+            // Check if it's an authentication error
+            if (result.message === 'Please log in to add items to your cart' || result.requiresAuth) {
+              console.log('Authentication required - redirecting to login');
+              Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: result.message,
+                showConfirmButton: false,
+                timer: 2000
+              }).then(() => {
+                console.log('Redirecting to login...');
+                window.location.href = '/login';
+              });
+            } else {
+              console.log('Other error:', result.message);
+              Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: result.message,
+                showConfirmButton: false,
+                timer: 1500
+              });
+            }
+          }
+        } catch (error) {
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'error',
+            title: 'Error adding to cart',
+            showConfirmButton: false,
+            timer: 1500
+          });
+        }
+      });
+    });
+
+    // Wishlist functionality
+    document.querySelectorAll('.btn-wishlist-home').forEach(button => {
+      button.addEventListener('click', async function() {
+        const productId = this.dataset.productId;
+
+        try {
+          const response = await fetch('/wishlist/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId })
+          });
+
+          // Handle both success and error responses
+          const result = await response.json();
+          console.log('Wishlist response status:', response.status);
+          console.log('Wishlist response result:', result);
+
+          // Check if it's a 401 Unauthorized or authentication error
+          if (response.status === 401 || !result.success) {
+            // Debug logging
+            console.log('Wishlist authentication error detected');
+            console.log('Status:', response.status);
+            console.log('Result:', result);
+
+            // Show authentication required message and redirect
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'error',
+              title: result.message || 'Please log in to manage your wishlist',
+              showConfirmButton: false,
+              timer: 2000
+            }).then(() => {
+              console.log('Redirecting to login...');
+              window.location.href = '/login';
+            });
+          } else if (result.success) {
+            // Update button appearance
+            const icon = this.querySelector('i');
+            if (result.isWishlisted) {
+              icon.className = 'ri-heart-fill';
+              this.classList.add('wishlisted');
+            } else {
+              icon.className = 'ri-heart-line';
+              this.classList.remove('wishlisted');
+            }
+
+            // Update wishlist count
+            if (wishlistCountElement) {
+              wishlistCountElement.textContent = result.wishlistCount;
+              wishlistCountElement.dataset.count = result.wishlistCount;
+            }
+
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'success',
+              title: result.message,
+              showConfirmButton: false,
+              timer: 1500
+            });
+          } else {
+            // Debug logging
+            console.log('Wishlist error response:', result);
+            console.log('Message:', result.message);
+            console.log('RequiresAuth:', result.requiresAuth);
+
+            // Check if it's an authentication error
+            if (result.message === 'Please log in to manage your wishlist' || result.requiresAuth) {
+              console.log('Authentication required - redirecting to login');
+              Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: result.message,
+                showConfirmButton: false,
+                timer: 2000
+              }).then(() => {
+                console.log('Redirecting to login...');
+                window.location.href = '/login';
+              });
+            } else {
+              console.log('Other error:', result.message);
+              Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: result.message,
+                showConfirmButton: false,
+                timer: 1500
+              });
+            }
+          }
+        } catch (error) {
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'error',
+            title: 'Error managing wishlist',
+            showConfirmButton: false,
+            timer: 1500
+          });
+        }
+      });
+    });
+  });
+</script>
+

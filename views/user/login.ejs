@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - BookHaven</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="/styles/user/loginPage.css" />
+    <style>
+      /* Black Circle Loader */
+      .full-page-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.9);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        z-index: 9999;
+      }
+      
+      .circle-loader {
+        border: 6px solid #f3f3f3; /* Light grey background */
+        border-top: 6px solid black; /* Black top */
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+      
+      .loader-message {
+        font-weight: 500;
+        color: #333;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body
+    class="paper-texture d-flex align-items-center justify-content-center min-vh-100 py-3"
+  >
+    <!-- Full Page Loader -->
+    <div class="full-page-loader" id="fullPageLoader">
+      <div class="circle-loader"></div>
+      <div class="loader-message">Logging in...</div>
+    </div>
+    
+    <div class="container">
+      <div class="login-container mx-auto bg-white row">
+        <div class="col-md-5 p-0 image-side d-none d-md-block">
+          <div class="overlay">
+            <div class="text-white">
+              <h2 class="h3 fw-bold mb-1">Welcome Back</h2>
+              <p class="mb-0 small">Continue your literary journey.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-7 form-side">
+          <div class="text-center mb-4">
+            <div class="d-flex align-items-center justify-content-center mb-2">
+              <img
+                src="../../assets/logo.png"
+                alt="BookHaven Logo"
+                class="me-2"
+                height="30"
+              />
+              <span class="logo-text fs-4">BookHaven</span>
+            </div>
+            <h2 class="fw-bold h4">Log in to your account</h2>
+            <p class="text-muted small mb-3">Pick up where you left off</p>
+          </div>
+          <form id="userLogin" method="post">
+            <div class="compact-mb">
+              <label for="email" class="form-label">Email Address</label>
+              <input
+                type="email"
+                name="email"
+                class="form-control form-control-sm"
+                id="email"
+                placeholder="Enter your email"
+              />
+              <div id="emailError" class="text-danger small mt-1"></div>
+            </div>
+            <div class="compact-mb">
+              <label for="password" class="form-label">Password</label>
+              <div class="input-group">
+                <input
+                  type="password"
+                  name="password"
+                  class="form-control form-control-sm"
+                  id="password"
+                  placeholder="Enter your password"
+                />
+                <button class="btn btn-outline-secondary btn-sm toggle-password" type="button" tabindex="-1">
+                  <i class="ri-eye-off-line"></i>
+                </button>
+              </div>
+              <div id="passwordError" class="text-danger small mt-1"></div>
+            </div>
+            <a href="/forgotPassword" class="forgot-password text-decoration-none"
+              >Forgot password?</a
+            >
+            <button
+              type="submit"
+              class="btn btn-primary btn-sm w-100 mb-2 py-2"
+              id="submitButton"
+            >
+              Log In
+            </button>
+            <div class="divider">
+              <span>OR</span>
+            </div>
+            <a href="/auth/google" class="btn btn-google w-100 mb-3">
+              <i class="ri-google-fill"></i>
+              Continue with Google
+            </a>
+          </form>
+          <div class="text-center mt-3">
+            <p class="small text-muted mb-0">
+              Don't have an account?
+              <a href="/signup" class="text-decoration-none fw-medium">Sign up</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Handle query parameter for blocked user
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get("error");
+      if (error === "blocked") {
+        Swal.fire({
+          icon: "error",
+          title: "Account Blocked",
+          text: "Your account is blocked. Please contact support.",
+          confirmButtonText: "OK",
+        });
+      }
+
+      // Validation styling functions
+      function setInvalid(element) {
+        element.classList.add("is-invalid");
+        element.classList.remove("is-valid");
+      }
+      function setValid(element) {
+        element.classList.add("is-valid");
+        element.classList.remove("is-invalid");
+      }
+      function resetValidation(element) {
+        element.classList.remove("is-valid");
+        element.classList.remove("is-invalid");
+      }
+
+      // Password toggle functionality
+      document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', function() {
+          const input = this.previousElementSibling;
+          const icon = this.querySelector('i');
+
+          if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('ri-eye-off-line', 'ri-eye-line');
+          } else {
+            input.type = 'password';
+            icon.classList.replace('ri-eye-line', 'ri-eye-off-line');
+          }
+        });
+      });
+
+      // Real-time validation
+      document.getElementById("email").addEventListener("input", function () {
+        const email = this.value.trim().toLowerCase();
+        const emailError = document.getElementById("emailError");
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (email === "") {
+          emailError.textContent = "";
+          resetValidation(this);
+        } else if (!emailRegex.test(email)) {
+          emailError.textContent = "Enter a valid email address";
+          setInvalid(this);
+        } else {
+          emailError.textContent = "";
+          setValid(this);
+        }
+      });
+
+      document.getElementById("password").addEventListener("input", function () {
+        const password = this.value;
+        const passwordError = document.getElementById("passwordError");
+        if (password === "") {
+          passwordError.textContent = "";
+          resetValidation(this);
+        } else if (password.length < 8) {
+          passwordError.textContent = "Password must be at least 8 characters";
+          setInvalid(this);
+        } else {
+          passwordError.textContent = "";
+          setValid(this);
+        }
+      });
+
+      // Show full page loader function
+      function showLoader() {
+        const loader = document.getElementById('fullPageLoader');
+        loader.style.display = 'flex';
+      }
+
+      // Form submission
+      document.getElementById("userLogin").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const email = document.getElementById("email").value.trim().toLowerCase();
+        const password = document.getElementById("password").value;
+        const submitButton = document.getElementById("submitButton");
+        document.getElementById("emailError").textContent = "";
+        document.getElementById("passwordError").textContent = "";
+        let isValid = true;
+
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!email || !emailRegex.test(email)) {
+          document.getElementById("emailError").textContent = "Valid email is required";
+          setInvalid(document.getElementById("email"));
+          isValid = false;
+        }
+        if (!password || password.length < 8) {
+          document.getElementById("passwordError").textContent =
+            "Password must be at least 8 characters";
+          setInvalid(document.getElementById("password"));
+          isValid = false;
+        }
+
+        if (isValid) {
+          try {
+            submitButton.disabled = true;
+            submitButton.innerHTML =
+              '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging In...';
+            const response = await fetch("/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+              // Show full page loader instead of SweetAlert
+              showLoader();
+              // Redirect after a short delay
+              setTimeout(() => {
+                window.location.href = "/";
+              }, 1000);
+            } else {
+              submitButton.disabled = false;
+              submitButton.textContent = "Log In";
+              
+              if (response.status === 403 && result.message.includes("verify")) {
+                Swal.fire({
+                  icon: "warning",
+                  title: "Verification Required",
+                  text: "Please verify your email first",
+                  confirmButtonText: "Go to Verification",
+                }).then(() => {
+                  window.location.href = "/verify-otp";
+                });
+              } else if (response.status === 403 && result.message.includes("blocked")) {
+                Swal.fire({
+                  icon: "error",
+                  title: "Account Blocked",
+                  text: result.message || "Your account is blocked. Please contact support.",
+                  confirmButtonText: "OK",
+                });
+              } else {
+                Swal.fire({
+                  icon: "error",
+                  title: "Sign In Failed",
+                  text: result.message || "Something went wrong!",
+                  confirmButtonText: "Try Again",
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Signin error:", error);
+            submitButton.disabled = false;
+            submitButton.textContent = "Log In";
+            Swal.fire({
+              icon: "error",
+              title: "Error",
+              text: "Unable to connect to the server. Please try again later.",
+              confirmButtonText: "OK",
+            });
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
