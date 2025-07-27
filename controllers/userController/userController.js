@@ -13,7 +13,6 @@ const pageNotFound = async (req, res) => {
 const loadHomePage = async (req, res) => {
   try {
     const categories = await categoryController.getCategories();
-
     const LIMIT = 4;
 
     const topSellingProducts = await Product.find({ isListed: true, isDeleted: false })

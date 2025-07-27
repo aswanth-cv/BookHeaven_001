@@ -228,24 +228,30 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.0.19/dist/sweetalert2.all.min.js"></script>
     <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        // Search functionality
-        const searchInput = document.querySelector('.search-input');
-        searchInput.addEventListener('input', function () {
-          const category = document.getElementById('categoryFilter').value;
-          const sort = document.getElementById('sortBy').value;
-          window.location.href = `/admin/getProducts?search=${encodeURIComponent(this.value)}&category=${category}&sort=${sort}&page=1`;
-        });
 
-        // Clear search functionality
-        const clearSearchBtn = document.querySelector('.clear-search-btn');
-        if (clearSearchBtn) {
-          clearSearchBtn.addEventListener('click', function () {
-            const category = document.getElementById('categoryFilter').value;
-            const sort = document.getElementById('sortBy').value;
-            window.location.href = `/admin/getProducts?search=&category=${category}&sort=${sort}&page=1`;
-          });
-        }
+     // Debounce function
+function debounce(fn, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.querySelector('.search-input');
+
+  // Debounced search function
+  const handleSearch = debounce(function () {
+    const category = document.getElementById('categoryFilter').value;
+    const sort = document.getElementById('sortBy').value;
+    window.location.href = `/admin/getProducts?search=${encodeURIComponent(this.value)}&category=${category}&sort=${sort}&page=1`;
+  }, 500); // 500ms debounce
+
+  searchInput.addEventListener('input', handleSearch);
+
+});
+
 
         // Filter and Sort functionality
         document.getElementById('categoryFilter').addEventListener('change', function () {
@@ -369,7 +375,6 @@
             }
           });
         });
-      });
     </script>
   </body>
 </html>

@@ -53,7 +53,7 @@ const getSignup = async (req, res) => {
 
 const postSignup = async (req, res) => {
   try {
-    const { fullName, email, phoneNumber, password, referralCode } = req.body;
+    const { fullName, email, phoneNumber, password } = req.body;
 
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedName = fullName.trim();
@@ -73,7 +73,7 @@ const postSignup = async (req, res) => {
     const otp = otpGenerator();
     console.log("Generated OTP:", otp);
 
-    const subjectContent = "Verify your email for Chapterless";
+    const subjectContent = "Verify your email for BookHaven";
 
     try {
       await sendOtpEmail(trimmedEmail, trimmedName, otp, subjectContent,"signup");
@@ -101,7 +101,7 @@ const postSignup = async (req, res) => {
       email: trimmedEmail,
       phone: trimmedPhone,
       password: hashedPassword,
-      referralCode: referralCode || null,
+      
     };
 
     const otpMessage = createOtpMessage(trimmedEmail, 'signup');
@@ -159,15 +159,14 @@ const verifyOtp = async (req, res) => {
     }
 
 
-    const userReferralCode = await generateReferralCode();
+    
 
     const newUser = new User({
       fullName: tempUser.fullName,
       email: tempUser.email,
       phone: tempUser.phone,
       password: tempUser.password,
-      isVerified: true,
-      referralCode: userReferralCode,
+      isVerified: true
     });
     await newUser.save();
 
@@ -213,7 +212,7 @@ const resendOtp = async (req, res) => {
     await otpDoc.save();
 
     const fullName = req.session.tempUser.fullName;
-    const subjectContent = "Your new OTP for Chapterless";
+    const subjectContent = "Your new OTP for BookHaven";
 
     await sendOtpEmail(email, fullName, otp, subjectContent, "resend");
 

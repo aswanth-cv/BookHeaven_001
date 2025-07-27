@@ -1,9 +1,9 @@
 const User = require('../models/userSchema');
 
 
-const adminMiddleware = {
+
   
-  isAdminAuthenticated: async (req, res, next) => {
+  const isAdminAuthenticated = async (req, res, next) => {
     try {
       if (req.session?.admin_id) {
         const admin = await User.findOne({ _id: req.session.admin_id, isAdmin: true });
@@ -17,10 +17,10 @@ const adminMiddleware = {
       console.error('Admin auth error:', err);
       return res.status(500).redirect('/admin/adminLogin');
     }
-  },
+  }
 
  
-  isAdminNotAuthenticated: async (req, res, next) => {
+  const isAdminNotAuthenticated = async (req, res, next) => {
     try {
       if (req.session?.admin_id) {
         const admin = await User.findOne({ _id: req.session.admin_id, isAdmin: true });
@@ -33,15 +33,19 @@ const adminMiddleware = {
       console.error('Admin not-auth error:', err);
       next();
     }
-  },
+  }
 
   
-  preventCache: (req, res, next) => {
+ const  preventCache = (req, res, next) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     next();
   }
-};
 
-module.exports = adminMiddleware;
+
+module.exports = {
+  isAdminAuthenticated,
+  isAdminNotAuthenticated,
+  preventCache
+}

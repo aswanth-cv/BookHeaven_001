@@ -3,12 +3,6 @@ const bcrypt = require("bcrypt");
 
 const getLogin = async (req, res) => {
   try {
-    res.header(
-      "Cache-Control",
-      "no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0"
-    );
-    res.header("Pragma", "no-cache");
-    res.header("Expires", "0");
 
     res.render("login");
   } catch (error) {
@@ -66,7 +60,7 @@ const postLogin = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: "Welcome to Chapterless",
+        message: "Welcome to BookHaven",
       });
     });
   } catch (error) {

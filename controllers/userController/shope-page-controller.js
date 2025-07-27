@@ -7,7 +7,13 @@ const shopPage = async (req, res) => {
     const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
-    let query = { isListed: true, isDeleted: false };
+    const searchQuery = req.query.search || '';
+    let query = {
+    isListed: true,
+    isDeleted: false,
+  title: { $regex: searchQuery, $options: 'i' } // adds case-insensitive title search
+};
+
 
     const categoryId = req.query.category;
     if (categoryId) {
@@ -94,6 +100,7 @@ const shopPage = async (req, res) => {
       minPrice,
       maxPrice,
       sortOption,
+      searchQuery,
       queryString: baseQueryString ? `&${baseQueryString}` : ''
     });
   } catch (error) {

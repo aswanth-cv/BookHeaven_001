@@ -100,7 +100,7 @@ const resendOtp = async (req, res) => {
 
     await otpDoc.save();
 
-    let subjectContent = "New Password Reset Code - Chapterless";
+    let subjectContent = "New Password Reset Code - BookHaven";
     await sendOtpEmail(email, user.fullName, otp, subjectContent, "forgot-password");
 
     const otpMessage = createOtpMessage(email, 'resend');
@@ -202,6 +202,8 @@ const verifyOtp = async (req, res) => {
 };
 
 const getResetPassword = async (req, res) => {
+  console.log("trigring...");
+  
   try {
     res.render("resetPasswordForm");
   } catch (error) {

@@ -35,7 +35,7 @@ const getUsers = async (req, res) => {
       startIdx,
       endIdx,
       searchTerm,
-    });
+    }); 
   } catch (error) {
     console.log("Error in getting User", error);
     res.status(500).send("Server error");

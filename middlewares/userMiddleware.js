@@ -5,10 +5,11 @@ const userMiddleware = async (req, res, next) => {
 
   if (req.isAuthenticated() && req.user) {
     res.locals.user = req.user;
-    
+
    
     if (!req.session.user_id) {
       req.session.user_id = req.user._id;
+         
     }
   } 
   
