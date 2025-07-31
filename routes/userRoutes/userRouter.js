@@ -14,6 +14,8 @@ const loginValidator = require('../../validators/user/loginValidator');
 const passwordController = require("../../controllers/userController/forgotPasswordController");
 const shopPageController = require("../../controllers/userController/shope-page-controller");
 const productDetailsController = require("../../controllers/userController/product-details-controller");
+const profileController = require("../../controllers/userController/profileController");
+const addressController = require("../../controllers/userController/addressController");
 const passport = require("passport");
 
 
@@ -51,6 +53,14 @@ userRouter.get("/auth/google/callback", googleController.googleController);
 // Product routes
 userRouter.get('/shopPage', shopPageController.shopPage);
 userRouter.get('/products/:id', productDetailsController.productDetails);
+
+
+
+userRouter.get("/profile",isAuthenticated,profileController.getProfile);
+userRouter.patch("/profile",isAuthenticated,profileController.updateProfile);
+
+
+userRouter.get("/address",isAuthenticated,addressController.getAddress);
 
 
 
