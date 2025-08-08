@@ -4,7 +4,9 @@ const {sendOtpEmail} = require("../../helpers/sendMail");
 const upload = require("../../helpers/multer");
 const path = require("path");
 const fs = require("fs");
+const {validateBasicOtp,validateOtpSession} = require("../../validators/user/basic-otp-validator")
 const { createOtpMessage } = require("../../helpers/email-mask");
+const { json } = require("stream/consumers");
 
 
 
@@ -49,8 +51,9 @@ const updateProfile = async(req,res)=>{
         }
 
         const {fullName,phone} = req.body;
+        
 
-        if(fullName || fullName.trim().length<3){
+        if(!fullName || fullName.trim().length<3){
             return res.status(400).json({
                 success:false,
                 message:"Full name must be at least 3 characters"
@@ -91,8 +94,9 @@ const updateProfile = async(req,res)=>{
         })
       }
       const existingPhone = await User.findOne({phone:phone.trim(),_id:{$ne:req.session.user_id}})
+      
 
-      if(!existingPhone){
+      if(existingPhone){
         return res.status(400).json({
             success:false,
             message:"Phone number already in use"
@@ -107,7 +111,7 @@ const updateProfile = async(req,res)=>{
         {new:true ,runValidators:true},
     ).lean();
 
-    if(!upadatedUser){
+    if(!updatedUser){
         return res.status(400).json({
             success:false,
             message:"User not found"
@@ -200,6 +204,7 @@ const updateProfile = async(req,res)=>{
 }
 
 const requestEmailUpdate = async(req,res)=>{
+    try{
     if(!req.session.user_id){
         return res.status(400).json({
             success:false,
@@ -215,6 +220,13 @@ const requestEmailUpdate = async(req,res)=>{
             message:"Please provide valid email id"
         })
     }
+    // const domain = email.split("@")[1];
+    // if (disposableDomains.includes(domain)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Please use a non-disposable email address",
+    //   });
+    // }
 
     const user = await User.findById(req.session.user_id);
 
@@ -240,20 +252,218 @@ const requestEmailUpdate = async(req,res)=>{
         })
     }
 
-    const top = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await OTP.deleteMany({
         email:email.toLowerCase(),
         purpose:"Email-update"
     });
+    await OTP.create({
+        email:email.toLowerCase(),
+        otp,
+        purpose:"email-update"
+    })
     console.log(`Generated OTP: ${otp}`)
+
+    try {
+        await sendOtpEmail(
+            email,
+            user.fullName,
+            otp,
+            "Email update verification",
+            "Email-update"
+        );
+    } catch (error) {
+        console.error("Email delivery faild",error);
+        await OTP.deleteMany({
+            email:toLowerCase(),
+            purpose:"Email-update"
+        });
+        return res.status(500).json({
+            success:false,
+            message:"Email faild to send,Internal server error"
+        })
+    }
+
+    req.session.newEmail = email.toLowerCase();
+
+    res.status(200).json({
+        success:true,
+        message:"Email verification code sended"
+    })
+}catch(error){
+    console.error("Error in email updating",error);
+    await OTP.deleteMany({
+        email:req.body.email?.toLowerCase(),
+        purpose:"email-update"
+    });
+    res.status(500).json({
+        success:false,
+        message:'Falid to process email update request'
+
+    })
+  }
 }
 
-    
 
+const verifyEmailOtp = async(req,res)=>{
+    try {
+        const {otp} = req.body;
+
+        const otpValidation = validateBasicOtp(otp);
+    if (!otpValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: otpValidation.message,
+      });
+    }
+
+    const sessionValidation = validateOtpSession(req, "email-update");
+    if (!sessionValidation.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: sessionValidation.message,
+        sessionExpired: sessionValidation.sessionExpired,
+      });
+    }
+
+    const otpRecord = await OTP.findOne({
+      email: req.session.newEmail,
+      otp,
+      purpose: "email-update",
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.session.user_id,
+      { email: req.session.newEmail, isVerified: true },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+     await OTP.deleteMany({
+      email: req.session.newEmail,
+      purpose: "email-update",
+    });
+    delete req.session.newEmail;
+
+    res.status(200).json({
+      success: true,
+      message: "Email updated successfully",
+      email: updatedUser.email,
+    });
+
+
+
+    } catch (error) {
+
+        console.error("Error verifying email OTP:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Email address already in use",
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Failed to verify OTP",
+    });
+        
+    }
+}
+
+
+const resendEmailOtp = async(req,res)=>{
+    try {
+        if (!req.session.user_id || !req.session.newEmail) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized or invalid session",
+      });
+    }
+
+    const user = await User.findById(req.session.user_id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await OTP.deleteMany({
+      email: req.session.newEmail,
+      purpose: "email-update",
+    });
+    await OTP.create({
+      email: req.session.newEmail,
+      otp,
+      purpose: "email-update",
+    });
+
+    try {
+        await sendOtpEmail(
+        req.session.newEmail,
+        user.fullName,
+        otp,
+        "Email Update Verification",
+        "email-update"
+      );
+    } catch (error) {
+        console.error("Email delivery failed for resend:", error);
+      
+      await OTP.deleteMany({
+        email: req.session.newEmail,
+        purpose: "email-update",
+      });
+      return res.status(500).json({
+        success: false,
+        message:
+          "Email failed to send. Please check your email service.",
+      });
+    }
+
+    const otpMessage = createOtpMessage(req.session.newEmail, 'resend');
+
+    res.status(200).json({
+        success:true,
+        message:otpMessage.message
+    })
+
+
+    } catch (error) {
+
+    console.error("Error resending email OTP:", error);
+    
+    await OTP.deleteMany({
+      email: req.session.newEmail,
+      purpose: "email-update",
+    });
+    res.status(500).json({
+      success: false,
+      message: "Failed to resend OTP. Please try again.",
+    });
+        
+    }
+}
 
 
 module.exports = {
     getProfile,
     updateProfile,
     uploadProfileImage,
+    requestEmailUpdate, 
+    verifyEmailOtp,
+    resendEmailOtp,
 }
