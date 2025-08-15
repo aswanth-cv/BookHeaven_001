@@ -173,7 +173,6 @@ const updateProfile = async(req,res)=>{
     // Local file path
     const imagePath = `/uploads/${req.file.filename}`;
 
-    // Update user with local file path
     const updatedUser = await User.findByIdAndUpdate(
       req.session.user_id,
       { profileImage: imagePath },
@@ -220,13 +219,13 @@ const requestEmailUpdate = async(req,res)=>{
             message:"Please provide valid email id"
         })
     }
-    // const domain = email.split("@")[1];
-    // if (disposableDomains.includes(domain)) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Please use a non-disposable email address",
-    //   });
-    // }
+    const domain = email.split("@")[1];
+    if (disposableDomains.includes(domain)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please use a non-disposable email address",
+      });
+    }
 
     const user = await User.findById(req.session.user_id);
 

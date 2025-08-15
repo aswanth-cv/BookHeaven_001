@@ -302,4 +302,11 @@ const softDeleteProduct = async (req, res) => {
   }
 };
 
-module.exports = { getProducts, addProduct, toggleProductStatus, getEditProduct, updateProduct, softDeleteProduct };
+module.exports = {
+  getProducts,
+  addProduct,
+  toggleProductStatus,
+  getEditProduct,
+  updateProduct,
+  softDeleteProduct
+       };

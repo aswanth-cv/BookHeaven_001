@@ -146,61 +146,96 @@ const addAddress = async (req, res) => {
 
 const placeOrder = async (req, res) => {
   try {
-    const userId = req.session.user_id;
+    const userId = req.session.user_id; 
     const { addressId, paymentMethod } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "User not logged in" });
+    if (!paymentMethod) {
+      return res.status(400).json({ success: false, message: "Payment method required" });
     }
 
-    if (!addressId) {
-      return res.status(400).json({ success: false, message: "Please select an address" });
+    const addressDoc = await Address.findOne({ _id: addressId, userId });
+    if (!addressDoc) {
+      return res.status(404).json({ success: false, message: "Address not found" });
     }
 
-    const cart = await Cart.findOne({ userId }).populate("items.productId");
+    const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, message: "Your cart is empty" });
     }
 
-    let totalPrice = 0;
-    cart.items.forEach(item => {
-      totalPrice += item.productId.price * item.quantity;
+    let subtotal = 0;
+    const orderItems = cart.items.map((item) => {
+      const product = item.product;
+      if (!product) {
+        throw new Error(`Product not found for cart item ${item._id}`);
+      }
+
+      const price = product.price ?? item.priceAtAddition ?? 0;
+      const discountedPrice = product.discountedPrice ?? price;
+      const quantity = item.quantity;
+
+      subtotal += discountedPrice * quantity;
+
+      return {
+        product: product._id,
+        title: product.title || "Untitled Product",
+        image: product.image || "/images/default-product.png",
+        price,
+        discountedPrice,
+        quantity,
+        priceBreakdown: {
+          originalPrice: price,
+          subtotal: price * quantity,
+          offerDiscount: price - discountedPrice,
+          offerTitle: product.offerTitle || null,
+          priceAfterOffer: discountedPrice,
+          couponDiscount: 0,
+          couponProportion: 0,
+          finalPrice: discountedPrice * quantity
+        },
+        status: "Active"
+      };
     });
 
-    const orderItems = cart.items.map(item => ({
-      productId: item.productId._id,
-      quantity: item.quantity,
-      price: item.productId.price
-    }));
+    const orderNumber = "ORD-" + Date.now();
 
     const newOrder = new Order({
-      userId,
-      addressId,
-      paymentMethod,
+      user: userId,
+      orderNumber,
       items: orderItems,
-      totalAmount: totalPrice,
-      status: paymentMethod === "COD" ? "Placed" : "Pending",
-      createdAt: new Date()
+      shippingAddress: addressDoc.toObject(), 
+      paymentMethod,
+      paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
+      orderStatus: paymentMethod === "COD" ? "Placed" : "Pending",
+      subtotal,
+      shipping: 0,
+      tax: 0,
+      total: subtotal
     });
 
     await newOrder.save();
 
-    for (let item of cart.items) {
-      await Product.findByIdAndUpdate(item.productId._id, {
-        $inc: { stock: -item.quantity }
-      });
-    }
-
     cart.items = [];
+    cart.totalAmount = 0;
     await cart.save();
 
-    return res.status(200).json({ success: true, message: "Order placed successfully" });
+    return res.status(201).json({
+      success: true,
+      message: "Order placed successfully",
+      orderId: newOrder._id
+    });
 
   } catch (error) {
     console.error("Error placing order:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to place order",
+      error: error.message
+    });
   }
 };
+
+
 
 
 module.exports = {

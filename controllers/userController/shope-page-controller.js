@@ -11,7 +11,7 @@ const shopPage = async (req, res) => {
     let query = {
     isListed: true,
     isDeleted: false,
-  title: { $regex: searchQuery, $options: 'i' } // adds case-insensitive title search
+  title: { $regex: searchQuery, $options: 'i' } 
 };
 
 

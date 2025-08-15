@@ -265,9 +265,9 @@
                     />
                     <label for="mainImage" class="custom-file-label">
                       <i class="ri-upload-2-line"></i> Change Image
-                      <button type="button" class="btn btn-sm btn-outline-danger remove-sub-image" >Remove</button>
-
                     </label>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="removeMainImageBtn">Remove</button>
+                    <input type="hidden" name="removeMainImage" id="removeMainImage" value="0" />
                   </div>
                 </div>
               </div>
@@ -292,6 +292,7 @@
                       <label for="subImage<%= index + 1 %>" class="custom-file-label">
                         <i class="ri-upload-2-line"></i> Change
                       </label>
+                      <button type="button" class="btn btn-sm btn-outline-danger mt-2 remove-sub-image-btn" data-input-id="subImage<%= index + 1 %>" data-preview-id="subImage<%= index + 1 %>Preview" data-existing-url="<%= subImage %>">Remove</button>
                     </div>
                   </div>
                   <% }) %>
@@ -313,6 +314,7 @@
                       <label for="subImage<%= i + 1 %>" class="custom-file-label">
                         <i class="ri-upload-2-line"></i> Select
                       </label>
+                      <button type="button" class="btn btn-sm btn-outline-danger mt-2 remove-sub-image-btn" data-input-id="subImage<%= i + 1 %>" data-preview-id="subImage<%= i + 1 %>Preview" data-existing-url="">Remove</button>
                     </div>
                   </div>
                   <% } %>
@@ -537,6 +539,20 @@
       let aspectRatio;
       let cropData = {};
 
+      function createTransparentImageFile(fileName, width = 200, height = 200, type = 'image/png') {
+        return new Promise((resolve) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, width, height);
+          canvas.toBlob((blob) => {
+            const file = new File([blob], fileName, { type, lastModified: Date.now() });
+            resolve(file);
+          }, type);
+        });
+      }
+
       function initCropper(image, aspectRatioValue) {
         if (cropper) {
           cropper.destroy();
@@ -635,21 +651,145 @@
             : "Unlisted";
         });
 
+      // Cache default labels to avoid showing filenames
+      document.querySelectorAll('.custom-file-label').forEach(label => {
+        if (!label.dataset.defaultLabel) {
+          label.dataset.defaultLabel = label.innerHTML;
+        }
+      });
+
       const fileInputs = document.querySelectorAll(".custom-file-input");
       fileInputs.forEach((input) => {
         input.addEventListener("change", function () {
           const label = this.nextElementSibling;
-          const fileName = this.files[0]?.name;
-          if (fileName) {
-            if (fileName.length > 12) {
-              label.textContent = fileName.substring(0, 10) + "...";
-            } else {
-              label.textContent = fileName;
-            }
-          } else {
-            label.innerHTML = '<i class="ri-upload-2-line"></i> Change Image';
+          if (label && label.classList.contains('custom-file-label')) {
+            label.innerHTML = label.dataset.defaultLabel || label.innerHTML;
           }
         });
+      });
+
+      const PLACEHOLDER_MAIN = '/api/placeholder/150/200';
+      const PLACEHOLDER_SUB = '/api/placeholder/100/100';
+
+      const removeMainBtn = document.getElementById('removeMainImageBtn');
+      if (removeMainBtn) {
+        removeMainBtn.addEventListener('click', async function () {
+          const preview = document.getElementById('mainImagePreview');
+          const input = document.getElementById('mainImage');
+          const removeFlag = document.getElementById('removeMainImage');
+          if (!input) return;
+
+          try {
+            const dummy = await createTransparentImageFile('removed-main.png');
+            const dt = new DataTransfer();
+            dt.items.add(dummy);
+            input.files = dt.files;
+
+            // Update UI
+            if (preview) preview.src = PLACEHOLDER_MAIN;
+            const label = input.nextElementSibling;
+            if (label && label.classList.contains('custom-file-label')) {
+              label.innerHTML = label.dataset.defaultLabel || label.innerHTML;
+            }
+            if (removeFlag) removeFlag.value = '1';
+          } catch (e) {
+            console.error('Failed to set transparent main image file:', e);
+          }
+        });
+      }
+
+      function addRemovedSubImage(url) {
+        if (!url) return;
+        let container = document.getElementById('removedSubImagesContainer');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'removedSubImagesContainer';
+          container.style.display = 'none';
+          document.getElementById('editProductForm').appendChild(container);
+        }
+        const exists = Array.from(container.querySelectorAll('input[name="removedSubImages[]"]')).some(i => i.value === url);
+        if (!exists) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'removedSubImages[]';
+          input.value = url;
+          container.appendChild(input);
+        }
+      }
+
+      document.querySelectorAll('.remove-sub-image-btn').forEach(btn => {
+        btn.addEventListener('click', async function () {
+          const inputId = this.getAttribute('data-input-id');
+          const previewId = this.getAttribute('data-preview-id');
+          const existingUrl = this.getAttribute('data-existing-url');
+
+          const input = document.getElementById(inputId);
+          const preview = document.getElementById(previewId);
+          if (!input) return;
+
+          try {
+            const dummy = await createTransparentImageFile(`removed-${inputId}.png`);
+            const dt = new DataTransfer();
+            dt.items.add(dummy);
+            input.files = dt.files;
+
+            if (preview) preview.src = PLACEHOLDER_SUB;
+            const label = input.nextElementSibling;
+            if (label && label.classList.contains('custom-file-label')) {
+              label.innerHTML = label.dataset.defaultLabel || label.innerHTML;
+            }
+
+            addRemovedSubImage(existingUrl);
+          } catch (e) {
+            console.error('Failed to set transparent sub image file:', e);
+          }
+        });
+      });
+
+      async function urlToFile(url, filename) {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Failed to fetch image: ' + url);
+        const blob = await res.blob();
+        const type = res.headers.get('content-type') || blob.type || 'image/jpeg';
+        return new File([blob], filename, { type, lastModified: Date.now() });
+      }
+
+      function isPlaceholder(url) {
+        return typeof url === 'string' && url.includes('/api/placeholder/');
+      }
+
+      async function prefillExistingSubImages() {
+        for (let i = 1; i <= 3; i++) {
+          const input = document.getElementById(`subImage${i}`);
+          const preview = document.getElementById(`subImage${i}Preview`);
+          if (!input || !preview) continue;
+
+          // Skip if user already selected/replaced/removed (input has files)
+          if (input.files && input.files.length > 0) continue;
+
+          const src = preview.getAttribute('src') || '';
+          if (!src || isPlaceholder(src)) continue; // no existing image
+
+          try {
+            const filename = src.split('/').pop() || `existing-sub-${i}.jpg`;
+            const file = await urlToFile(src, filename);
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+
+            const label = input.nextElementSibling;
+            if (label && label.classList.contains('custom-file-label')) {
+              label.innerHTML = label.dataset.defaultLabel || label.innerHTML;
+            }
+          } catch (e) {
+            console.error('Failed to prefill sub image', i, e);
+          }
+        }
+      }
+
+      // Prefill as soon as the page has fully loaded
+      window.addEventListener('load', () => {
+        prefillExistingSubImages();
       });
     </script>
     <!-- Load validation script after all dependencies -->

@@ -101,7 +101,7 @@
                                 src="<%= item.image || 'https://via.placeholder.com/120x160' %>" 
                                 alt="<%= item.title || 'Product' %>" 
                                 class="img-fluid rounded"
-                                onerror="this.src='https://via.placeholder.com/120x160'"
+                                onerror="this.onerror=null; this.src='https://via.placeholder.com/120x160'"
                               >
                             </div>
                             <div class="order-item-details">
@@ -169,7 +169,59 @@
                           <% } %>
                           <button class="btn btn-outline-dark btn-sm" onclick="reorder('<%= order._id %>')">Buy Again</button>
                           <% if (['Placed', 'Processing'].includes(order.orderStatus)) { %>
-                            <a href="/orders/<%= order._id %>" class="btn btn-outline-danger btn-sm">Cancel Order</a>
+                            <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#cancelOrderModal-<%= order._id %>">Cancel Order</button>
+
+                            <!-- Cancel Order Modal -->
+                            <div class="modal fade" id="cancelOrderModal-<%= order._id %>" tabindex="-1" aria-labelledby="cancelOrderModalLabel-<%= order._id %>" aria-hidden="true">
+                              <div class="modal-dialog">
+                                <div class="modal-content">
+                                  <div class="modal-header">
+                                    <h5 class="modal-title" id="cancelOrderModalLabel-<%= order._id %>">Cancel Order</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                  </div>
+                                  <div class="modal-body">
+                                    <p>Are you sure you want to cancel this order?</p>
+                                    <p><strong>Order #<%= order.orderNumber %></strong></p>
+
+                                    <div class="alert alert-info mt-3">
+                                      <% if (order.paymentMethod === 'COD' && order.orderStatus !== 'Delivered' && !order.deliveredAt) { %>
+                                        <p class="mb-2">This COD order will be cancelled. <strong>No refund is required</strong> as no payment has been collected yet.</p>
+                                        <small class="text-muted">
+                                          You will pay nothing for this cancelled order.
+                                        </small>
+                                      <% } else { %>
+                                        <p class="mb-2">If you cancel this order, <strong><%= order.formattedTotal %></strong> will be refunded to your wallet.</p>
+                                        <small class="text-muted">
+                                          This is the exact amount you paid for this order (including all discounts and taxes).
+                                        </small>
+                                      <% } %>
+                                    </div>
+
+                                    <form id="cancelOrderForm-<%= order._id %>">
+                                      <div class="mb-3">
+                                        <label for="cancelOrderReason-<%= order._id %>" class="form-label">Reason for Cancellation</label>
+                                        <select class="form-control" id="cancelOrderReason-<%= order._id %>" required>
+                                          <option value="">Select a reason</option>
+                                          <option value="Changed my mind">Changed my mind</option>
+                                          <option value="Found a better price elsewhere">Found a better price elsewhere</option>
+                                          <option value="Ordered by mistake">Ordered by mistake</option>
+                                          <option value="Shipping time is too long">Shipping time is too long</option>
+                                          <option value="Other">Other</option>
+                                        </select>
+                                      </div>
+                                      <div class="mb-3" id="otherOrderReasonDiv-<%= order._id %>" style="display: none;">
+                                        <label for="otherOrderReason-<%= order._id %>" class="form-label">Please specify</label>
+                                        <textarea class="form-control" id="otherOrderReason-<%= order._id %>" rows="3"></textarea>
+                                      </div>
+                                    </form>
+                                  </div>
+                                  <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-danger" onclick="cancelOrder('<%= order._id %>')">Cancel Order</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           <% } %>
                           <div class="mt-2 text-center">
                             <%
@@ -670,6 +722,77 @@
     // Remove toast after it's hidden
     toast.addEventListener('hidden.bs.toast', () => {
       toast.remove();
+    });
+  }
+</script>
+
+<script>
+  // Toggle Other reason fields for each order modal in Orders list
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[id^="cancelOrderReason-"]').forEach(select => {
+      select.addEventListener('change', function() {
+        const id = this.id.split('cancelOrderReason-')[1];
+        const otherDiv = document.getElementById(`otherOrderReasonDiv-${id}`);
+        if (this.value === 'Other') {
+          otherDiv.style.display = 'block';
+        } else {
+          otherDiv.style.display = 'none';
+        }
+      });
+    });
+  });
+
+  // Cancel entire order from Orders list (prevents navigation flicker)
+  function cancelOrder(orderId) {
+    const reasonSelect = document.getElementById(`cancelOrderReason-${orderId}`);
+    const otherReasonInput = document.getElementById(`otherOrderReason-${orderId}`);
+
+    let reason = reasonSelect ? reasonSelect.value : '';
+
+    if (!reason) {
+      showToast('Please select a reason for cancellation', 'warning');
+      return;
+    }
+
+    if (reason === 'Other') {
+      const other = (otherReasonInput?.value || '').trim();
+      if (!other) {
+        showToast('Please specify the reason for cancellation', 'warning');
+        return;
+      }
+      reason = other;
+    }
+
+    // Show processing toast
+    showToast('Processing your cancellation request...', 'info');
+
+    // Send cancellation request
+    fetch(`/orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        // Hide the modal
+        const modalEl = document.getElementById(`cancelOrderModal-${orderId}`);
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+
+        showToast(data.message || 'Order cancelled successfully', 'success');
+
+        // Reload once to refresh list state
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        showToast(data.message || 'Cancellation failed', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      showToast('An error occurred while processing your request.', 'error');
     });
   }
 </script>

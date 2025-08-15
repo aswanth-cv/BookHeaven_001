@@ -164,8 +164,7 @@ const addToCart = async (req, res) => {
       );
     }
 
-    console.log("Cart items before placing order:", cart?.items);
-
+   
     await cart.save();
 
     const cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);

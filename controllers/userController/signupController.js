@@ -14,6 +14,7 @@ const getOtp = async (req, res) => {
       maskedEmail: otpMessage.maskedEmail,
       otpMessage: otpMessage.fullMessage
     });
+
   } catch (error) {
 
     res.status(500).json({ message: "Server error" });

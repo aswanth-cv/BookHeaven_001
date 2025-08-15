@@ -20,6 +20,7 @@ const orderController = require("../../controllers/userController/orderControlle
 const cartController = require("../../controllers/userController/cartController");
 const wishlistController = require("../../controllers/userController/wishlist-controller");
 const checkoutController = require("../../controllers/userController/checkoutController");
+const changePasswordController = require("../../controllers/userController/changePasswordController");
 const passport = require("passport");
 
 
@@ -140,6 +141,14 @@ userRouter.post('/checkout/place-order', isAuthenticated, checkoutController.pla
 
 
 userRouter.get("/orders",isAuthenticated,orderController.getOrders);
+userRouter.post('/orders/:id/cancel',isAuthenticated,orderController.cancelOrder);
+userRouter.get('/orders/:id', isAuthenticated, orderController.getOrderDetails);
+userRouter.get('/order-success/:id', isAuthenticated, orderController.getOrderSuccess);
+userRouter.get('/orders/:id/invoice', isAuthenticated, orderController.viewInvoice);
+userRouter.get('/orders/:id/invoice/download', isAuthenticated, orderController.downloadInvoice);
+
+userRouter.post('/change-password', isAuthenticated, changePasswordController.changePassword);
+
 
 
 

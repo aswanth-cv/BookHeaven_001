@@ -124,7 +124,7 @@ const updateAddress = async(req,res)=>{
       await Address.updateMany({ userId }, { isDefault: false });
     }
 
-     address.fullName = fullName;
+    address.fullName = fullName;
     address.phone = phone;
     address.pincode = pincode;
     address.district = district;

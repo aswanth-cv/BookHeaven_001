@@ -9,7 +9,7 @@ const categoryController = require('../../controllers/adminController/categoryCo
 const productController = require('../../controllers/adminController/productController');
 const manageProductController = require('../../controllers/adminController/manageProducts');
 const dashboardController = require('../../controllers/adminController/dashboard-controller')
-
+const manageOrderController =require("../../controllers/adminController/manage-orders");
 const upload = require('../../config/multer');
 
 
@@ -60,6 +60,13 @@ adminRoute.get('/products/:id/edit', productController.getEditProduct);
 adminRoute.post('/products/:id', upload.fields([{ name: 'mainImage' }, { name: 'subImages', maxCount: 3 }]), productController.updateProduct);
 adminRoute.put('/products/:id', upload.fields([{ name: 'mainImage' }, { name: 'subImages', maxCount: 3 }]), productController.updateProduct);
 adminRoute.put('/products/:id/soft-delete', productController.softDeleteProduct);
+
+
+adminRoute.get('/getOrders', manageOrderController.getManageOrders);
+adminRoute.get('/orders/:id', manageOrderController.getOrderDetails);
+adminRoute.put('/orders/:id/status', manageOrderController.updateOrderStatus);
+
+
 
 
 module.exports = adminRoute
