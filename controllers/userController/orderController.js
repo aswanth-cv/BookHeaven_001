@@ -5,6 +5,9 @@ const Cart = require("../../models/cartSchema"); // Added Cart import
 const path = require('path');
 const mongoose = require("mongoose");
 const PDFDocument = require('pdfkit');
+const { processCancelRefund , processReturnRefund} = require("../../controllers/userController/walletController");
+const { validateCouponAfterItemCancellation, validateCouponAfterItemReturn } = require("../../helpers/coupon-validation");
+const { calculateExactRefundAmount } = require("../../helpers/money-calculator");
 
 
 const getOrders = async (req, res) => {
@@ -14,6 +17,7 @@ const getOrders = async (req, res) => {
     }
 
     const userId = req.session.user_id;
+
 
     const user = await User.findById(userId, 'fullName email profileImage').lean();
     if (!user) {
@@ -99,6 +103,7 @@ const getOrders = async (req, res) => {
 
       order.formattedSubtotal = `₹${(order.subtotal || 0).toFixed(2)}`;
       order.formattedTax = `₹${(order.tax || 0).toFixed(2)}`;
+      order.formattedShipping = `₹${(order.shipping || 0).toFixed(2)}`;
       order.formattedTotal = `₹${(order.total || 0).toFixed(2)}`;
       order.formattedDiscount = (order.discount || 0) > 0 ? `₹${order.discount.toFixed(2)}` : '₹0.00';
       order.formattedCouponDiscount = (order.couponDiscount || 0) > 0 ? `₹${order.couponDiscount.toFixed(2)}` : '₹0.00';
@@ -145,12 +150,18 @@ const getOrderDetails = async (req, res) => {
     if (!user) return res.redirect('/login');
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return res.status(HttpStatus.BAD_REQUEST).render('error', { message: 'Invalid order ID' });
+      return res.status(401).render('user/page-404', { 
+        title: 'Invalid Order',
+        message: 'Invalid order ID' 
+      });
     }
 
     const order = await Order.findById(orderId).populate('items.product');
     if (!order || order.user.toString() !== userId.toString()) {
-      return res.status(HttpStatus.NOT_FOUND).render('error', { message: 'Order not found' });
+      return res.status(404).render('user/page-404', { 
+        title: 'Order Not Found',
+        message: 'Order not found' 
+      });
     }
 
     order.formattedDate = new Date(order.createdAt).toLocaleDateString('en-US', {
@@ -160,10 +171,56 @@ const getOrderDetails = async (req, res) => {
     });
 
     order.items.forEach(item => {
-      item.originalPrice = item.price;
-      item.formattedPrice = `₹${item.price.toFixed(2)}`;
-      item.finalPrice = item.price;
+      // Extract price breakdown information if available
+      if (item.priceBreakdown) {
+        item.originalPrice = item.priceBreakdown.originalPrice || item.price;
+        // Fix: Convert total prices back to per-unit prices for display
+        item.discountedPrice = (item.priceBreakdown.priceAfterOffer || (item.price * item.quantity)) / item.quantity;
+        item.finalPrice = (item.priceBreakdown.finalPrice || (item.discountedPrice * item.quantity)) / item.quantity;
+        item.offerDiscount = item.priceBreakdown.offerDiscount || 0;
+        item.offerTitle = item.priceBreakdown.offerTitle || item.offerTitle;
+        item.couponDiscount = item.priceBreakdown.couponDiscount || 0;
+        item.couponProportion = item.priceBreakdown.couponProportion || 0;
+        
+        // Calculate discount percentage for display (based on per-unit prices)
+        if (item.offerDiscount > 0 && item.originalPrice > 0) {
+          const perUnitOfferDiscount = item.offerDiscount / item.quantity;
+          item.discountPercentage = Math.round((perUnitOfferDiscount / item.originalPrice) * 100);
+        }
+        
+        // Ensure numeric values for proper comparison
+        item.originalPrice = Number(item.originalPrice);
+        item.discountedPrice = Number(item.discountedPrice);
+        item.finalPrice = Number(item.finalPrice);
+        item.offerDiscount = Number(item.offerDiscount);
+        item.couponDiscount = Number(item.couponDiscount);
+      } else {
+        // Fallback for orders without priceBreakdown
+        item.originalPrice = Number(item.price);
+        item.discountedPrice = Number(item.price);
+        item.finalPrice = Number(item.price);
+        item.offerDiscount = 0;
+        item.couponDiscount = 0;
+        item.couponProportion = 0;
+      }
+
+      // Calculate expected refund amount for this item (for display purposes)
+      // Use the same calculation as the wallet refund processing
+      try {
+        item.expectedRefundAmount = calculateExactRefundAmount(item, order);
+      } catch (error) {
+        console.error('Error calculating expected refund amount:', error);
+        // Fallback to item final price
+        item.expectedRefundAmount = item.priceBreakdown?.finalPrice || 
+                                   (item.discountedPrice * item.quantity) || 
+                                   (item.price * item.quantity);
+      }
+
+      // Format prices for display
+      item.formattedPrice = `₹${item.originalPrice.toFixed(2)}`;
+      item.formattedDiscountedPrice = `₹${item.discountedPrice.toFixed(2)}`;
       item.formattedFinalPrice = `₹${item.finalPrice.toFixed(2)}`;
+      item.formattedExpectedRefund = `₹${item.expectedRefundAmount.toFixed(2)}`;
 
       item.canBeCancelled = (
         item.status === 'Active' &&
@@ -206,13 +263,39 @@ const getOrderDetails = async (req, res) => {
       }
     });
 
-    const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    // Calculate subtotal from original prices (before discounts)
+    const originalSubtotal = order.items.reduce((sum, item) => {
+      const itemOriginalTotal = (item.originalPrice || item.price) * (item.quantity || 1);
+      return sum + itemOriginalTotal;
+    }, 0);
+    
+    // Calculate final total using final prices (after offers and coupons)
+    const finalTotal = order.items.reduce((sum, item) => {
+      const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.price * item.quantity);
+      return sum + itemFinalPrice;
+    }, 0);
+    
     const tax = order.tax || 0;
-    const total = subtotal + tax;
+    const shipping = order.shipping || 0;
+    const totalWithTaxAndShipping = finalTotal + tax + shipping;
 
-    order.formattedSubtotal = `₹${subtotal.toFixed(2)}`;
+    // Format order totals
+    order.formattedSubtotal = `₹${originalSubtotal.toFixed(2)}`;
     order.formattedTax = `₹${tax.toFixed(2)}`;
-    order.formattedTotal = `₹${total.toFixed(2)}`;
+    order.formattedShipping = `₹${(order.shipping || 0).toFixed(2)}`;
+    order.formattedTotal = `₹${totalWithTaxAndShipping.toFixed(2)}`;
+    
+    // Format individual discount totals for display
+    const totalOfferDiscount = order.items.reduce((sum, item) => sum + (item.offerDiscount || 0), 0);
+    const totalCouponDiscount = order.items.reduce((sum, item) => sum + (item.couponDiscount || 0), 0);
+    
+    // Set order-level discount values for template compatibility
+    order.discount = totalOfferDiscount;
+    order.couponDiscount = totalCouponDiscount;
+    
+    order.formattedOfferDiscount = `₹${totalOfferDiscount.toFixed(2)}`;
+    order.formattedCouponDiscount = `₹${totalCouponDiscount.toFixed(2)}`;
+    order.formattedDiscount = `₹${totalOfferDiscount.toFixed(2)}`;
 
     const timeline = [
       {
@@ -260,6 +343,22 @@ const getOrderDetails = async (req, res) => {
       });
     }
 
+    // Check if this is a JSON request (for AJAX updates)
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+      return res.json({
+        success: true,
+        order: {
+          ...order.toObject(),
+          formattedDate: order.formattedDate,
+          formattedSubtotal: order.formattedSubtotal,
+          formattedTax: order.formattedTax,
+          formattedTotal: order.formattedTotal,
+          items: order.items
+        },
+        timeline
+      });
+    }
+
     res.render('order-details', {
       order,
       timeline,
@@ -275,7 +374,10 @@ const getOrderDetails = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching order details:', error);
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('error', { message: 'Error fetching order details' });
+    res.status(500).render('user/page-404', { 
+      title: 'Error',
+      message: 'Error fetching order details' 
+    });
   }
 };
 
@@ -308,24 +410,44 @@ const getOrderSuccess = async (req, res) => {
       return res.redirect('/login');
     }
 
-    const totalOfferDiscount = order.items.reduce((sum, item) => {
-      return sum + (item.priceBreakdown?.offerDiscount || 0);
-    }, 0);
+    // Use order-level discount values for accuracy
+    const totalOfferDiscount = order.discount || 0;
+    const totalCouponDiscount = order.couponDiscount || 0;
 
-    const totalCouponDiscount = order.items.reduce((sum, item) => {
-      return sum + (item.priceBreakdown?.couponDiscount || 0);
-    }, 0);
+    // IMPORTANT: order.subtotal is already discounted (after offers applied)
+    // So the correct calculation is: subtotal - coupons + tax + shipping
+    // NOT: subtotal - offers - coupons + tax + shipping
+    const calculatedTotal = order.subtotal - totalCouponDiscount + (order.tax || 0) + (order.shipping || 0);
+    
+    // Add debug logging
+    console.log('📄 Success Page Debug:', {
+      orderData: {
+        subtotal: order.subtotal, // Already discounted
+        discount: order.discount,
+        couponDiscount: order.couponDiscount,
+        tax: order.tax,
+        shipping: order.shipping,
+        storedTotal: order.total
+      },
+      calculatedTotal: calculatedTotal,
+      difference: Math.abs(calculatedTotal - order.total),
+      note: 'subtotal is already discounted (after offers applied)'
+    });
 
     res.render('order-success', {
       orderNumber: order.orderNumber,
       orderId: order._id,
       paymentMethod: order.paymentMethod,
-      subtotal: order.subtotal,
+      subtotal: order.subtotal, // This is already discounted
       offerDiscount: totalOfferDiscount,
       couponDiscount: totalCouponDiscount,
       couponCode: order.couponCode,
       tax: order.tax,
+      shipping: order.shipping || 0,
       total: order.total,
+      calculatedTotal: calculatedTotal,
+      // Add original subtotal for proper display
+      originalSubtotal: order.subtotal + totalOfferDiscount, // Reconstruct original
       user: {
         id: userId,
         fullName: user.fullName || 'User',
@@ -336,7 +458,8 @@ const getOrderSuccess = async (req, res) => {
     });
   } catch (error) {
     console.error('Error rendering order success page:', error);
-    res.status(500).render('error', {
+    res.status(500).render('user/page-404', {
+      title: 'Error',
       message: 'Internal server error',
       isAuthenticated: req.session.user_id ? true : false
     });
@@ -361,7 +484,8 @@ const viewInvoice = async (req, res) => {
     }).lean();
 
     if (!order) {
-      return res.status(404).render('error', {
+      return res.status(404).render('user/page-404', {
+        title: 'Order Not Found',
         message: 'Order not found or you do not have access to this order'
       });
     }
@@ -377,8 +501,13 @@ const viewInvoice = async (req, res) => {
       day: 'numeric'
     });
 
+    // Filter out canceled and returned items for invoice display
+    const activeItems = order.items.filter(item => 
+      item.status === 'Active' || !item.status
+    );
+
     let recalculatedSubtotal = 0;
-    order.items.forEach(item => {
+    activeItems.forEach(item => {
       if (item.priceBreakdown) {
         recalculatedSubtotal += item.priceBreakdown.subtotal || (item.price * item.quantity);
       } else {
@@ -389,17 +518,21 @@ const viewInvoice = async (req, res) => {
     const useStoredSubtotal = order.subtotal && Math.abs(order.subtotal - recalculatedSubtotal) < 0.01;
     const displaySubtotal = useStoredSubtotal ? order.subtotal : recalculatedSubtotal;
 
-    const correctTotal = displaySubtotal - (order.discount || 0) - (order.couponDiscount || 0) + (order.tax || 0);
+    const correctTotal = displaySubtotal - (order.discount || 0) - (order.couponDiscount || 0) + (order.tax || 0) + (order.shipping || 0);
     const useStoredTotal = order.total && Math.abs(order.total - correctTotal) < 0.01;
     const displayTotal = useStoredTotal ? order.total : correctTotal;
 
     order.formattedSubtotal = `₹${displaySubtotal.toFixed(2)}`;
     order.formattedTotal = `₹${displayTotal.toFixed(2)}`;
     order.formattedTax = `₹${(order.tax || 0).toFixed(2)}`;
+    order.formattedShipping = `₹${(order.shipping || 0).toFixed(2)}`;
     order.formattedDiscount = `₹${(order.discount || 0).toFixed(2)}`;
     order.formattedCouponDiscount = `₹${(order.couponDiscount || 0).toFixed(2)}`;
 
     order.total = displayTotal;
+
+    // Update order.items to only include active items for invoice display
+    order.items = activeItems;
 
     order.items.forEach(item => {
       item.formattedPrice = `₹${item.price.toFixed(2)}`;
@@ -413,7 +546,8 @@ const viewInvoice = async (req, res) => {
 
   } catch (error) {
     console.error('Error viewing invoice:', error);
-    res.status(500).render('error', {
+    res.status(500).render('user/page-404', {
+      title: 'Error',
       message: 'Error loading invoice'
     });
   }
@@ -431,10 +565,37 @@ const downloadInvoice = async (req, res) => {
             return res.status(404).send("Order not found");
         }
 
-        const subtotal = order.items.reduce((acc, item) => acc + item.quantity * item.price, 0);
-        const shipping = order.shippingCharge || 0;
+        const formattedDate = new Date(order.createdAt).toLocaleDateString('en-US', {
+            year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        // Filter out canceled and returned items for invoice display
+        const activeItems = order.items.filter(item => 
+            item.status === 'Active' || !item.status
+        );
+
+        let recalculatedSubtotal = 0;
+        activeItems.forEach((item) => {
+            if (item.priceBreakdown && item.priceBreakdown.subtotal != null) {
+                recalculatedSubtotal += item.priceBreakdown.subtotal;
+            } else {
+                recalculatedSubtotal += (item.price || 0) * (item.quantity || 0);
+            }
+        });
+
+        const useStoredSubtotal = order.subtotal && Math.abs(order.subtotal - recalculatedSubtotal) < 0.01;
+        const displaySubtotal = useStoredSubtotal ? order.subtotal : recalculatedSubtotal;
+
         const discount = order.discount || 0;
-        const total = subtotal + shipping - discount;
+        const couponDiscount = order.couponDiscount || 0;
+        const tax = order.tax || 0;
+        const shipping = order.shipping || 0; // Fixed: use order.shipping instead of order.shippingCharge
+
+        const correctTotal = displaySubtotal - discount - couponDiscount + tax + shipping;
+        const useStoredTotal = order.total && Math.abs(order.total - correctTotal) < 0.01;
+        const displayTotal = useStoredTotal ? order.total : correctTotal;
+
+        const toCurrency = (n) => `₹${Number(n || 0).toFixed(2)}`;
 
         const doc = new PDFDocument({ margin: 50 });
 
@@ -446,38 +607,137 @@ const downloadInvoice = async (req, res) => {
 
         doc.pipe(res);
 
-        doc.fontSize(20).text("Invoice", { align: "center" });
-        doc.moveDown();
+        const rightColX = 350;
+        doc.fillColor('#111827').fontSize(18).text('BookHaven', 50, 50);
+        doc.fillColor('#6b7280').fontSize(10).text('Where Stories Find Lost Souls', 50, doc.y + 2);
 
-        doc.fontSize(12).text(`Invoice ID: ${order._id}`);
-        doc.text(`Date: ${order.createdAt.toLocaleDateString()}`);
-        doc.text(`Customer: ${order.user.name}`);
-        doc.text(`Email: ${order.user.email}`);
-        doc.moveDown();
+        doc.fillColor('#6b7280').fontSize(11).text('Invoice', rightColX, 50, { width: 200, align: 'right' });
+        doc.fillColor('#1f2937').fontSize(11).text(`Invoice #: ${order.orderNumber}`, rightColX, doc.y + 6, { width: 200, align: 'right' });
+        doc.text(`Date: ${formattedDate}`, rightColX, doc.y + 2, { width: 200, align: 'right' });
+        if (order.orderStatus) {
+            doc.text(`Status: ${order.orderStatus}`, rightColX, doc.y + 2, { width: 200, align: 'right' });
+        }
 
-        doc.fontSize(14).text("Items", { underline: true });
-        doc.moveDown(0.5);
-        doc.fontSize(12);
-        doc.text("Product", 50, doc.y);
-        doc.text("Qty", 250, doc.y);
-        doc.text("Price", 300, doc.y);
-        doc.text("Total", 400, doc.y);
-        doc.moveDown();
+        let cursorY = 120;
+        doc.fillColor('#6b7280').fontSize(10).text('Delivery Address', 50, cursorY);
+        cursorY = doc.y + 6;
+        doc.roundedRect(50, cursorY, 330, 90, 6).stroke('#e5e7eb');
 
-        order.items.forEach(item => {
-            doc.text(item.product.name, 50, doc.y);
-            doc.text(item.quantity.toString(), 250, doc.y);
-            doc.text(item.price.toFixed(2), 300, doc.y);
-            doc.text((item.quantity * item.price).toFixed(2), 400, doc.y);
-            doc.moveDown();
+        const addrX = 60;
+        let addrY = cursorY + 10;
+        const a = order.shippingAddress || {};
+        const fullName = a.fullName || 'N/A';
+        const street = a.street || '';
+        const landmark = a.landmark || '';
+        const city = a.city || '';
+        const state = a.state || '';
+        const pinCode = a.pinCode || '';
+        const country = a.country || '';
+        const userEmail = (order.user && order.user.email) ? order.user.email : '';
+
+        doc.fillColor('#111827').fontSize(11).text(fullName, addrX, addrY, { width: 310 });
+        addrY = doc.y + 2;
+        if (street) { doc.fillColor('#1f2937').text(street, addrX, addrY, { width: 310 }); addrY = doc.y + 2; }
+        if (landmark) { doc.text(landmark, addrX, addrY, { width: 310 }); addrY = doc.y + 2; }
+        const lineCity = `${city}${city && state ? ', ' : ''}${state} ${pinCode}`.trim();
+        if (lineCity) { doc.text(lineCity, addrX, addrY, { width: 310 }); addrY = doc.y + 2; }
+        if (country) { doc.text(country, addrX, addrY, { width: 310 }); addrY = doc.y + 2; }
+        if (userEmail) { doc.fillColor('#6b7280').text(userEmail, addrX, addrY, { width: 310 }); }
+
+        doc.fillColor('#6b7280').fontSize(10).text('Order Summary', rightColX, 120, { width: 200, align: 'right' });
+        const sumBoxY = 136;
+        doc.roundedRect(rightColX, sumBoxY, 200, 90, 6).stroke('#e5e7eb');
+        doc.fillColor('#1f2937').fontSize(11);
+        let lineY = sumBoxY + 10;
+        const drawKV = (k, v) => {
+            doc.fillColor('#6b7280').text(k, rightColX + 10, lineY, { width: 90 });
+            doc.fillColor('#111827').text(v, rightColX + 110, lineY, { width: 80, align: 'right' });
+            lineY = doc.y + 4;
+        };
+        drawKV('Order #', `${order.orderNumber}`);
+        drawKV('Order Date', `${formattedDate}`);
+        drawKV('Payment', `${order.paymentMethod || 'Cash on Delivery'}`);
+        if (order.couponCode) drawKV('Coupon', `${order.couponCode}`);
+
+        let tableY = Math.max(cursorY + 110, sumBoxY + 110);
+        const col = { idx: 50, title: 80, price: 370, qty: 440, total: 500 };
+        const rowHeight = 20;
+
+        doc.rect(50, tableY, 510, rowHeight).fill('#f3f4f6');
+        doc.fillColor('#374151').fontSize(11).text('#', col.idx + 2, tableY + 6, { width: 20 });
+        doc.text('Book', col.title, tableY + 6, { width: 270 });
+        doc.text('Unit Price', col.price, tableY + 6, { width: 60, align: 'right' });
+        doc.text('Qty', col.qty, tableY + 6, { width: 40, align: 'right' });
+        doc.text('Line Total', col.total, tableY + 6, { width: 60, align: 'right' });
+
+        doc.fillColor('#1f2937');
+        tableY += rowHeight;
+
+        const addTableHeader = () => {
+            doc.addPage();
+            tableY = 50;
+            doc.rect(50, tableY, 510, rowHeight).fill('#f3f4f6');
+            doc.fillColor('#374151').fontSize(11).text('#', col.idx + 2, tableY + 6, { width: 20 });
+            doc.text('Book', col.title, tableY + 6, { width: 270 });
+            doc.text('Unit Price', col.price, tableY + 6, { width: 60, align: 'right' });
+            doc.text('Qty', col.qty, tableY + 6, { width: 40, align: 'right' });
+            doc.text('Line Total', col.total, tableY + 6, { width: 60, align: 'right' });
+            doc.fillColor('#1f2937');
+            tableY += rowHeight;
+        };
+
+        activeItems.forEach((item, idx) => {
+            const name = (item.title) ? item.title : (item.product && (item.product.title || item.product.name)) || 'Unknown Product';
+            const qty = item.quantity || 1;
+            const price = Number(item.price || 0);
+            const lineTotal = price * qty;
+
+            if (tableY > doc.page.height - 120) {
+                addTableHeader();
+            }
+
+            doc.fontSize(11).fillColor('#6b7280').text(String(idx + 1), col.idx + 2, tableY + 6, { width: 20 });
+            doc.fillColor('#1f2937').text(name, col.title, tableY + 6, { width: 270 });
+            doc.text(toCurrency(price), col.price, tableY + 6, { width: 60, align: 'right' });
+            doc.text(String(qty), col.qty, tableY + 6, { width: 40, align: 'right' });
+            doc.text(toCurrency(lineTotal), col.total, tableY + 6, { width: 60, align: 'right' });
+
+            doc.moveTo(50, tableY + rowHeight).lineTo(560, tableY + rowHeight).strokeColor('#e5e7eb').stroke();
+
+            tableY += rowHeight;
         });
 
-        doc.moveDown();
-        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, { align: "right" });
-        doc.text(`Shipping: ₹${shipping.toFixed(2)}`, { align: "right" });
-        doc.text(`Discount: -₹${discount.toFixed(2)}`, { align: "right" });
-        doc.moveDown(0.5);
-        doc.fontSize(14).text(`Total: ₹${total.toFixed(2)}`, { align: "right" });
+        let totalsY = tableY + 20;
+        if (totalsY > doc.page.height - 180) {
+            doc.addPage();
+            totalsY = 50;
+        }
+        const totalsBoxW = 260;
+        const totalsX = 560 - totalsBoxW;
+        doc.roundedRect(totalsX, totalsY, totalsBoxW, 150, 8).stroke('#e5e7eb');
+
+        const line = (label, value, isGrand = false) => {
+            doc.fontSize(isGrand ? 12 : 11)
+               .fillColor(isGrand ? '#111827' : '#1f2937')
+               .text(label, totalsX + 12, doc.y + (isGrand ? 10 : 8), { width: 140 });
+            doc.text(value, totalsX + 160, doc.y - (isGrand ? 0 : 0), { width: 80, align: 'right' });
+            doc.moveTo(totalsX + 12, doc.y + 6).lineTo(totalsX + totalsBoxW - 12, doc.y + 6).strokeColor('#f3f4f6').stroke();
+        };
+
+        doc.moveTo(totalsX, totalsY).strokeColor('#e5e7eb');
+        doc.y = totalsY + 6;
+        line('Subtotal', toCurrency(displaySubtotal));
+        if (discount > 0) line('Offer Discount', `-${toCurrency(discount)}`);
+        if (couponDiscount > 0) line(`Coupon Discount${order.couponCode ? ' (' + order.couponCode + ')' : ''}`, `-${toCurrency(couponDiscount)}`);
+        line('Tax', toCurrency(tax));
+        if (shipping > 0) line('Shipping', toCurrency(shipping));
+        line('Total', toCurrency(displayTotal), true);
+        line('Payment Method', `${order.paymentMethod || 'Cash on Delivery'}`);
+
+        
+        let footerY = doc.page.height - 80;
+        doc.fontSize(10).fillColor('#6b7280').text('This is a computer-generated invoice and does not require a signature.', 50, footerY, { width: 510, align: 'center' });
+        doc.text('Thank you for shopping at BookHaven 📚', 50, doc.y + 4, { width: 510, align: 'center' });
 
         doc.end();
 
@@ -629,12 +889,31 @@ const cancelOrderItem = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Item not found or already cancelled' });
     }
 
-
     const allowedStatuses = ['Placed', 'Processing', 'Partially Cancelled'];
     if (!allowedStatuses.includes(order.orderStatus)) {
       return res.status(400).json({
         success: false,
         message: `Items cannot be cancelled when order is in ${order.orderStatus} status`
+      });
+    }
+
+    // **NEW: Validate coupon conditions before allowing partial cancellation**
+    const couponValidation = await validateCouponAfterItemCancellation(order, productId);
+    
+    if (!couponValidation.success) {
+      return res.status(500).json({
+        success: false,
+        message: couponValidation.message
+      });
+    }
+
+    if (!couponValidation.allowPartialCancellation) {
+      return res.status(400).json({
+        success: false,
+        message: couponValidation.message,
+        requiresFullCancellation: true,
+        couponCode: couponValidation.couponCode,
+        minOrderAmount: couponValidation.minOrderAmount
       });
     }
 
@@ -669,7 +948,6 @@ const cancelOrderItem = async (req, res) => {
       productId,
       { $inc: { stock: orderItem.quantity } }
     );
-
 
     if (order.paymentMethod === 'COD') {
       const wasDeliveredAndPaid = order.paymentStatus === 'Paid' ||
@@ -890,6 +1168,26 @@ const returnOrderItem = async (req, res) => {
       });
     }
 
+    // **NEW: Validate coupon conditions before allowing partial return**
+    const couponValidation = await validateCouponAfterItemReturn(order, productId);
+    
+    if (!couponValidation.success) {
+      return res.status(500).json({
+        success: false,
+        message: couponValidation.message
+      });
+    }
+
+    if (!couponValidation.allowPartialReturn) {
+      return res.status(400).json({
+        success: false,
+        message: couponValidation.message,
+        requiresFullReturn: true,
+        couponCode: couponValidation.couponCode,
+        minOrderAmount: couponValidation.minOrderAmount
+      });
+    }
+
     orderItem.status = 'Return Requested';
     orderItem.returnReason = reason;
     orderItem.returnRequestedAt = new Date();
@@ -927,5 +1225,8 @@ module.exports = {
     getOrderSuccess,
     viewInvoice,
     downloadInvoice,
-    cancelOrder
+    cancelOrder,
+    cancelOrderItem,
+    returnOrder,
+    returnOrderItem
 };

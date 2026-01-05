@@ -10,6 +10,10 @@ const productController = require('../../controllers/adminController/productCont
 const manageProductController = require('../../controllers/adminController/manageProducts');
 const dashboardController = require('../../controllers/adminController/dashboard-controller')
 const manageOrderController =require("../../controllers/adminController/manage-orders");
+const returnManagementController = require("../../controllers/adminController/returnManagementController");
+const couponController = require("../../controllers/adminController/couponController");
+const offerController = require("../../controllers/adminController/offer-controller");
+const salesController =require("../../controllers/adminController/sales-controller");
 const upload = require('../../config/multer');
 
 
@@ -65,7 +69,34 @@ adminRoute.put('/products/:id/soft-delete', productController.softDeleteProduct)
 adminRoute.get('/getOrders', manageOrderController.getManageOrders);
 adminRoute.get('/orders/:id', manageOrderController.getOrderDetails);
 adminRoute.put('/orders/:id/status', manageOrderController.updateOrderStatus);
+adminRoute.put('/orders/:id/return-request', manageOrderController.approveReturnRequest);
 
+
+adminRoute.get('/return-management', returnManagementController.getReturnRequests);
+adminRoute.get('/return-management/:id', returnManagementController.getReturnRequestDetails);
+adminRoute.put("/return-management/:id/process", returnManagementController.processReturnRequest)
+adminRoute.post('/return-management/bulk-process', returnManagementController.bulkProcessReturns)
+
+
+//coupon management 
+
+adminRoute.get('/coupons', couponController.getCoupons);
+adminRoute.get('/coupons/:id', couponController.getCouponDetails);
+adminRoute.post('/coupons', couponController.createCoupon);
+adminRoute.put('/coupons/:id', couponController.updateCoupon);
+adminRoute.put('/coupons/:id/toggle-status', couponController.toggleCouponStatus);
+
+
+adminRoute.get('/offers', offerController.getOffers);
+adminRoute.post('/offers', offerController.createOffer);
+adminRoute.get('/offers/:id', offerController.getOfferDetails); // For fetching details for edit/view
+adminRoute.put('/offers/:id', offerController.updateOffer);
+adminRoute.put('/offers/:id/toggle-status', offerController.toggleOfferStatus);
+
+
+adminRoute.get('/sales',salesController.getSales)
+adminRoute.get('/sales/export/excel', salesController.exportToExcel)
+adminRoute.get('/sales/export/pdf', salesController.exportToPDF)
 
 
 

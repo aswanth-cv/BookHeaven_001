@@ -51,19 +51,22 @@
         </div>
 
         <div class="search-container">
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search products, authors, categories..."
-            value="<%= search %>"
-          />
-          <i class="fas fa-search search-icon"></i>
+            <input
+               id="searchInput"
+               type="text"
+               class="search-input"
+               placeholder="Search products, authors, categories..."
+               value="<%= search %>"
+         />
+         <i class="fas fa-search search-icon"></i>
+
           <% if (search && search.length > 0) { %>
-          <button class="clear-search-btn" type="button" title="Clear search">
-            <i class="fas fa-times"></i>
-          </button>
-          <% } %>
-        </div>
+             <button id="clearBtn" class="clear-search-btn" type="button" title="Clear search">
+          <i class="fas fa-times"></i>
+            </button>
+        <% } %>
+       </div>
+
 
         <div class="filters">
           <div class="filter-group">
@@ -240,17 +243,39 @@ function debounce(fn, delay) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const searchInput = document.querySelector('.search-input');
+  const clearBtn = document.querySelector('.clear-search-btn');
 
-  // Debounced search function
-  const handleSearch = debounce(function () {
+  if (!searchInput) return;
+
+  function doSearch(query) {
     const category = document.getElementById('categoryFilter').value;
     const sort = document.getElementById('sortBy').value;
-    window.location.href = `/admin/getProducts?search=${encodeURIComponent(this.value)}&category=${category}&sort=${sort}&page=1`;
-  }, 500); // 500ms debounce
 
-  searchInput.addEventListener('input', handleSearch);
+    window.location.href = `/admin/getProducts?search=${encodeURIComponent(query)}&category=${category}&sort=${sort}&page=1`;
+  }
 
+  // Enter key triggers search
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doSearch(this.value.trim());
+    }
+  });
+
+  // Clicking search icon triggers search
+  document.querySelector('.search-icon')?.addEventListener('click', () => {
+    doSearch(searchInput.value.trim());
+  });
+
+  // Clear search button
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = "";
+      doSearch("");
+    });
+  }
 });
+
 
 
         // Filter and Sort functionality

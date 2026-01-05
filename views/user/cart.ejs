@@ -71,6 +71,31 @@
 <!-- Cart Content Section -->
 <section class="py-5">
   <div class="container">
+    <!-- Error/Success Messages -->
+    <% if (typeof errorMessage !== 'undefined' && errorMessage) { %>
+      <div class="row justify-content-center mb-4">
+        <div class="col-lg-10">
+          <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="ri-error-warning-line me-2"></i>
+            <strong>Stock Update:</strong> <%= errorMessage.replace(/\n/g, '<br>') %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+    <% } %>
+    
+    <% if (typeof successMessage !== 'undefined' && successMessage) { %>
+      <div class="row justify-content-center mb-4">
+        <div class="col-lg-10">
+          <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="ri-check-line me-2"></i>
+            <%= successMessage %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+    <% } %>
+    
     <div class="row g-5">
       <!-- Cart Items -->
       <div class="col-lg-8">
@@ -124,7 +149,7 @@
                 <div class="col-md-2 col-6 text-end">
                   <div class="d-flex flex-column align-items-end">
                     <% if (item.product.discountPercentage > 0) { %>
-                      <span class="original-price">₹<%= item.product.regularPrice.toFixed(2) %></span>
+                      <span class="original-price">₹<%= item.product.originalPrice.toFixed(2) %></span>
                       <span class="discounted-price fw-bold">₹<%= (item.quantity * item.product.finalPrice).toFixed(2) %></span>
                     <% } else { %>
                       <span class="fw-bold">₹<%= (item.quantity * item.product.finalPrice).toFixed(2) %></span>
@@ -166,20 +191,48 @@
           
           <!-- Shipping -->
           <div class="d-flex justify-content-between mb-3">
-            <span>Shipping</span>
-            <span class="fw-semibold">₹0</span>
+            <span>Delivery</span>
+            <span class="fw-semibold">
+              <% 
+                const cartSubtotal = parseFloat(totalAmount) + parseFloat(totalDiscount);
+                const deliveryCharge = cartSubtotal >= 1000 ? 0 : 50;
+              %>
+              <% if (deliveryCharge > 0) { %>
+                ₹<%= deliveryCharge.toFixed(2) %>
+              <% } else { %>
+                <span class="text-success">FREE</span>
+              <% } %>
+            </span>
           </div>
+          
+          <% if (deliveryCharge > 0) { %>
+            <div class="alert alert-info small mb-3">
+              <i class="ri-truck-line me-1"></i>
+              Add ₹<%= (1000 - cartSubtotal).toFixed(2) %> more to get FREE delivery!
+            </div>
+          <% } else { %>
+            <div class="alert alert-success small mb-3">
+              <i class="ri-check-line me-1"></i>
+              Congratulations! You qualify for FREE delivery.
+            </div>
+          <% } %>
           
           <hr class="my-3">
           
           <!-- Total -->
           <div class="d-flex justify-content-between align-items-center mb-4">
             <span class="fs-5 fw-bold">Total</span>
-            <span class="fs-5 fw-bold">₹<%= totalAmount %></span>
+            <span class="fs-5 fw-bold">₹<%= (parseFloat(totalAmount) + deliveryCharge).toFixed(2) %></span>
           </div>
           
           <!-- Checkout Button -->
-          <a href="/checkout" class="btn btn-dark w-100 py-3 fw-medium">Proceed to Checkout</a>
+          <button id="proceedToCheckoutBtn" class="btn btn-dark w-100 py-3 fw-medium">
+            <span class="btn-text">Proceed to Checkout</span>
+            <span class="btn-spinner d-none">
+              <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Validating Stock...
+            </span>
+          </button>
           
           <!-- Payment Methods -->
           <div class="payment-methods mt-3 text-center">
@@ -232,7 +285,7 @@
               <div class="d-flex justify-content-between align-items-center">
                 <div>
                   <% if (product.activeOffer && product.discountPercentage > 0) { %>
-                    <span class="original-price">₹<%= product.regularPrice.toFixed(2) %></span>
+                    <span class="original-price">₹<%= product.originalPrice.toFixed(2) %></span>
                     <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                   <% } else { %>
                     <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
@@ -839,7 +892,13 @@ document.addEventListener('DOMContentLoaded', function () {
       </div>
       
       <!-- Checkout Button -->
-      <a href="/checkout" class="btn btn-dark w-100 py-3 fw-medium">Proceed to Checkout</a>
+      <button id="proceedToCheckoutBtn2" class="btn btn-dark w-100 py-3 fw-medium">
+        <span class="btn-text">Proceed to Checkout</span>
+        <span class="btn-spinner d-none">
+          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          Validating Stock...
+        </span>
+      </button>
       
       <!-- Payment Methods -->
       <div class="payment-methods mt-3 text-center">
@@ -854,6 +913,15 @@ document.addEventListener('DOMContentLoaded', function () {
     `;
     
     orderSummary.innerHTML = summaryHTML;
+    
+    // Re-attach event listener to the new checkout button
+    const newCheckoutBtn = document.getElementById('proceedToCheckoutBtn2');
+    if (newCheckoutBtn) {
+      newCheckoutBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        proceedToCheckout(this);
+      });
+    }
   }
 
   function handleOrderSummaryPosition() {
@@ -894,6 +962,92 @@ document.addEventListener('DOMContentLoaded', function () {
       title: message,
       showConfirmButton: false,
       timer: 3000
+    });
+  }
+
+  // Proceed to Checkout with Stock Validation
+  async function proceedToCheckout(button) {
+    const btnText = button.querySelector('.btn-text');
+    const btnSpinner = button.querySelector('.btn-spinner');
+    
+    // Show loading state
+    btnText.classList.add('d-none');
+    btnSpinner.classList.remove('d-none');
+    button.disabled = true;
+    
+    try {
+      const response = await fetch('/checkout/validate-stock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.valid) {
+        // Stock is valid, proceed to checkout
+        window.location.href = '/checkout';
+      } else if (result.success && !result.valid) {
+        // Stock issues found, show detailed error message
+        let errorMessage = 'Stock has been updated. Please adjust your cart quantities:\n\n';
+        
+        if (result.stockIssues && result.stockIssues.length > 0) {
+          result.stockIssues.forEach(issue => {
+            if (issue.issue === 'Insufficient stock') {
+              errorMessage += `• ${issue.productTitle}: You have ${issue.requestedQuantity} in cart, but only ${issue.availableStock} available\n`;
+            } else {
+              errorMessage += `• ${issue.productTitle}: ${issue.issue}\n`;
+            }
+          });
+        }
+        
+        // Show error message using SweetAlert
+        Swal.fire({
+          icon: 'warning',
+          title: 'Stock Updated',
+          text: errorMessage,
+          confirmButtonText: 'Update Cart',
+          confirmButtonColor: '#000'
+        }).then(() => {
+          // Reload the page to show updated stock
+          window.location.reload();
+        });
+        
+      } else {
+        showNotification('error', result.message || 'Error validating stock');
+      }
+      
+    } catch (error) {
+      console.error('Stock validation error:', error);
+      showNotification('error', 'Error validating stock. Please try again.');
+    } finally {
+      // Reset button state
+      btnText.classList.remove('d-none');
+      btnSpinner.classList.add('d-none');
+      button.disabled = false;
+    }
+  }
+
+  // Add event listeners for checkout buttons
+  const checkoutBtn1 = document.getElementById('proceedToCheckoutBtn');
+  const checkoutBtn2 = document.getElementById('proceedToCheckoutBtn2');
+  
+  if (checkoutBtn1) {
+    checkoutBtn1.addEventListener('click', function(e) {
+      e.preventDefault();
+      proceedToCheckout(this);
+    });
+  }
+  
+  if (checkoutBtn2) {
+    checkoutBtn2.addEventListener('click', function(e) {
+      e.preventDefault();
+      proceedToCheckout(this);
     });
   }
 });

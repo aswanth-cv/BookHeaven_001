@@ -1,11 +1,13 @@
 const Product = require('../../models/productSchema');
 const Category = require('../../models/categorySchema');
+const { getActiveOfferForProduct, calculateDiscount } = require('../../utils/offer-helper');
 
 const shopPage = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
+    
 
     const searchQuery = req.query.search || '';
     let query = {
@@ -61,6 +63,31 @@ const shopPage = async (req, res) => {
     const totalPages = Math.ceil(totalProducts / limit);
 
     const paginatedProducts = allProducts.slice(skip, skip + limit);
+
+    // Apply offers to products
+    for (const product of paginatedProducts) {
+      const offer = await getActiveOfferForProduct(
+        product._id,
+        product.category._id,
+        product.salePrice
+      );
+
+      if (offer) {
+        const { discountAmount, discountPercentage, finalPrice } = calculateDiscount(offer, product.salePrice);
+        
+        product.originalPrice = product.salePrice;
+        product.finalPrice = finalPrice;
+        product.activeOffer = offer;
+        product.discountAmount = discountAmount;
+        product.discountPercentage = discountPercentage;
+      } else {
+        product.originalPrice = product.salePrice;
+        product.finalPrice = product.salePrice;
+        product.activeOffer = null;
+        product.discountAmount = 0;
+        product.discountPercentage = 0;
+      }
+    }
 
     const paginationData = {
       totalPages,

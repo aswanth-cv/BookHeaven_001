@@ -6,9 +6,13 @@
     <div class="hero-content text-white">
       <h1 class="display-4 fw-bold mb-4">Discover Stories That Find You</h1>
       <p class="fs-5 mb-4">WHERE STORIES FIND LOST SOULS</p>
-      <div class="d-flex flex-column flex-sm-row gap-3">
+      <div class="d-flex flex-column flex-sm-row gap-3 mb-3">
         <!-- <a href="/shopPage" class="btn btn-light px-4 py-2 fw-medium">Shop Now</a> -->
         <a href="/shopPage" class="btn btn-outline-light px-4 py-2 fw-medium">Explore Collections</a>
+      </div>
+      <div class="d-flex align-items-center text-white-75">
+        <i class="ri-truck-line me-2"></i>
+        <small>FREE delivery on orders above ₹1000</small>
       </div>
     </div>
   </div>
@@ -78,11 +82,11 @@
                     <% if (product.activeOffer) { %>
                       <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
-                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.originalPrice.toFixed(2) %></span>
                       </div>
                       <small class="text-success d-block"><%= product.activeOffer.title %></small>
                     <% } else { %>
-                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                     <% } %>
                   </div>
                   <div class="d-flex gap-2 align-items-center">
@@ -142,11 +146,11 @@
                     <% if (product.activeOffer) { %>
                       <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
-                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.originalPrice.toFixed(2) %></span>
                       </div>
                       <small class="text-success d-block"><%= product.activeOffer.title %></small>
                     <% } else { %>
-                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                     <% } %>
                   </div>
                   <div class="d-flex gap-2 align-items-center">

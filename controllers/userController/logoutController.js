@@ -1,9 +1,33 @@
 
 const logout = async (req, res) => {
   try {
-    req.session.destroy((err) => {
+    if (typeof req.logout === 'function') {
+      try {
+        await new Promise((resolve, reject) => {
+          req.logout({ keepSessionInfo: true }, (err) => {
+            if (err) {
+              console.error('Passport logout error:', err);
+              resolve();
+            } else {
+              resolve();
+            }
+          });
+        });
+      } catch (passportError) {
+        console.error('Passport logout failed:', passportError);
+      }
+    }
+    
+    delete req.session.user_id;
+    delete req.session.user_email;
+    
+    if (req.session.passport) {
+      delete req.session.passport.user;
+    }
+    
+    req.session.save((err) => {
       if (err) {
-        console.error("Error destroying session:", err);
+        console.error("Error saving session after user logout:", err);
         return res.status(500).send("Logout failed");
       }
       

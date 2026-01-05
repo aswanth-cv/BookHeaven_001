@@ -65,14 +65,18 @@ const postAdminLogin = async (req, res) => {
 
 const logoutAdminDashboard = async (req, res) => {
   try {
-    req.session.destroy((error) => {
+    delete req.session.admin_id;
+    
+    req.session.save((error) => {
       if (error) {
-        console.error('Error destroying session:', error);
+        console.error('Error saving session after admin logout:', error);
         return res.status(500).send('Logout Failed');
       }
-
-
-      res.clearCookie('connect.sid');
+      
+      res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+      res.header('Pragma', 'no-cache');
+      res.header('Expires', '0');
+      
       res.redirect('/admin/adminLogin');
     });
   } catch (error) {

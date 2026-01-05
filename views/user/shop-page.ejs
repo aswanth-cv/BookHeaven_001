@@ -19,6 +19,51 @@
     font-size: 0.875rem;
     margin-right: 0.5rem;
   }
+
+  /* Stock Labels */
+  .stock-label {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    z-index: 1;
+  }
+
+  .stock-label.out-of-stock {
+    background-color: #dc3545;
+    color: white;
+  }
+
+  .stock-label.low-stock {
+    background-color: #ffc107;
+    color: #000;
+  }
+
+  /* Remove square border/outline for wishlist button on shop page only */
+  .btn-wishlist-shop {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .btn-wishlist-shop:focus,
+  .btn-wishlist-shop:active {
+    outline: none;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+  }
+  .btn-wishlist-shop i {
+    font-size: 1.1rem;
+  }
 </style>
 
 <!-- Shop Header -->
@@ -27,7 +72,11 @@
     <div class="row align-items-center">
       <div class="col-lg-6">
         <h1 class="display-5 fw-bold mb-3">Shop Our Collection</h1>
-        <p class="text-muted mb-0">Curated books that will find their way to your soul.</p>
+        <p class="text-muted mb-2">Curated books that will find their way to your soul.</p>
+        <div class="d-flex align-items-center text-success">
+          <i class="ri-truck-line me-2"></i>
+          <small class="fw-medium">FREE delivery on orders above ₹1000</small>
+        </div>
       </div>
       <div class="col-lg-6">
         <nav aria-label="breadcrumb">
@@ -115,8 +164,11 @@
                    placeholder="Search books..."
                    value="<%= typeof searchQuery !== 'undefined' ? searchQuery : '' %>"
                    style="width: 220px;">
-            <button class="btn btn-dark btn-sm" onclick="applyFilters()">
+            <button class="btn btn-dark btn-sm" onclick="applyFilters()" title="Search">
               <i class="ri-search-line"></i>
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" id="clearSearchBtn" type="button" onclick="clearSearch()" title="Clear search" style="display: none;">
+              <i class="ri-close-circle-line"></i>
             </button>
           </div>
 
@@ -169,6 +221,13 @@
                       <span class="offer-badge"><%= product.discountPercentage %>% OFF</span>
                     <% } %>
 
+                    <!-- Stock Labels -->
+                    <% if (product.stock === 0) { %>
+                      <span class="stock-label out-of-stock">Out of Stock</span>
+                    <% } else if (product.stock <= 10) { %>
+                      <span class="stock-label low-stock">Low Stock</span>
+                    <% } %>
+
                     <a href="/products/<%= product._id %>" class="text-decoration-none">
                       <img src="<%= product.mainImage || '/api/placeholder/500/600' %>" alt="<%= product.title %>" class="product-image" />
                     </a>
@@ -181,11 +240,11 @@
                     <div class="d-flex justify-content-between align-items-center">
                       <div>
                         <% if (product.activeOffer && product.discountPercentage > 0) { %>
-                          <span class="original-price">₹<%= product.regularPrice.toFixed(2) %></span>
-                          <span class="fw-bold">₹<%= product.salePrice ? product.salePrice.toFixed(2) : "N/A" %></span>
+                          <span class="original-price">₹<%= product.originalPrice.toFixed(2) %></span>
+                          <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                           <small class="d-block text-success"><%= product.activeOffer.title %></small>
                         <% } else { %>
-                          <span class="fw-bold">₹<%= product.salePrice.toFixed(2) %></span>
+                          <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                         <% } %> 
                       </div>
                       <div class="d-flex gap-2 align-items-center">
@@ -355,9 +414,19 @@
     }
 
     window.location.href = url.toString();
-  }
-
-  function sortProducts() {
+    }
+    
+    function clearSearch() {
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    params.delete('search');
+    params.set('page', '1');
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    window.location.href = url.toString();
+    }
+    
+    function sortProducts() {
     const sortValue = document.getElementById('sortSelect').value;
     const url = new URL(window.location.href);
     url.searchParams.set('sort', sortValue);
@@ -458,10 +527,109 @@
       });
     }
 
-    // --------------------  Cart and Wishlist (unchanged) --------------------
+    // Toggle clear button visibility (added)
+    const clearBtn = document.getElementById('clearSearchBtn');
+    const searchEl = document.getElementById('searchInput');
+    const toggleClear = () => {
+      if (!clearBtn) return;
+      clearBtn.style.display = searchEl && searchEl.value.trim() ? 'inline-block' : 'none';
+    };
+    toggleClear();
+    if (searchEl) {
+      searchEl.addEventListener('input', toggleClear);
+    }
+
+    // --------------------  Cart and Wishlist handlers --------------------
     const cartCountElement = document.querySelector('.cart-count');
     const wishlistCountElement = document.querySelector('.wishlist-count');
 
-    /* ... the rest of the long cart / wishlist JS block is unchanged ... */
+    function updateCount(el, count) {
+      if (!el) return;
+      const value = Number.isFinite(count) ? count : parseInt(el.getAttribute('data-count') || '0', 10) || 0;
+      el.textContent = value;
+      el.setAttribute('data-count', String(value));
+    }
+
+    async function postJson(url, data) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(data)
+      });
+      let json = null;
+      try { json = await res.json(); } catch (e) {}
+      return { ok: res.ok, status: res.status, data: json };
+    }
+
+    const productGrid = document.getElementById('productGrid');
+
+    if (productGrid) {
+      productGrid.addEventListener('click', async (e) => {
+        const addBtn = e.target.closest('.add-to-cart');
+        const wishBtn = e.target.closest('.btn-wishlist-shop');
+
+        if (addBtn) {
+          e.preventDefault();
+          const productId = addBtn.getAttribute('data-product-id');
+          if (!productId) return;
+          addBtn.disabled = true;
+          const originalHtml = addBtn.innerHTML;
+          addBtn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i>';
+          try {
+            const resp = await postJson('/cart/add', { productId, quantity: 1 });
+            if (resp.status === 401 && resp.data && resp.data.requiresAuth) {
+              window.location.href = resp.data.redirectTo || '/login';
+              return;
+            }
+            if (resp.ok && resp.data && resp.data.success) {
+              updateCount(cartCountElement, resp.data.cartCount);
+              if (window.Swal) Swal.fire({ icon: 'success', title: 'Added to cart', timer: 1200, showConfirmButton: false });
+            } else {
+              const msg = (resp.data && resp.data.message) || 'Failed to add to cart';
+              if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: msg });
+            }
+          } catch (err) {
+            if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: 'Network error' });
+          } finally {
+            addBtn.disabled = false;
+            addBtn.innerHTML = originalHtml;
+          }
+          return;
+        }
+
+        if (wishBtn) {
+          e.preventDefault();
+          const productId = wishBtn.getAttribute('data-product-id');
+          if (!productId) return;
+          wishBtn.disabled = true;
+          const icon = wishBtn.querySelector('i');
+          const hadFill = icon && icon.classList.contains('ri-heart-fill');
+          if (icon) icon.className = 'ri-loader-4-line ri-spin';
+          try {
+            const resp = await postJson('/wishlist/toggle', { productId });
+            if (resp.status === 401 && resp.data && resp.data.requiresAuth) {
+              window.location.href = resp.data.redirectTo || '/login';
+              return;
+            }
+            if (resp.ok && resp.data && resp.data.success) {
+              updateCount(wishlistCountElement, resp.data.wishlistCount);
+              const isWishlisted = !!resp.data.isWishlisted;
+              if (icon) icon.className = isWishlisted ? 'ri-heart-fill text-danger' : 'ri-heart-line';
+              // if (window.Swal) Swal.fire({ icon: 'success', title: resp.data.message || (isWishlisted ? 'Added to wishlist' : 'Removed from wishlist'), timer: 1200, showConfirmButton: false });
+            } else {
+              const msg = (resp.data && resp.data.message) || 'Failed to update wishlist';
+              if (icon) icon.className = hadFill ? 'ri-heart-fill text-danger' : 'ri-heart-line';
+              if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: msg });
+            }
+          } catch (err) {
+            if (icon) icon.className = hadFill ? 'ri-heart-fill text-danger' : 'ri-heart-line';
+            if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: 'Network error' });
+          } finally {
+            wishBtn.disabled = false;
+          }
+        }
+      });
+    }
   });
 </script>

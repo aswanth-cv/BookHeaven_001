@@ -947,13 +947,28 @@
               <div class="data-label">Items</div>
               <div class="data-value"><%= order.items.length %> items</div>
 
+              <% if (order.hasPartialCancellation) { %>
+              <div class="data-label">Current Total</div>
+              <div class="data-value" style="color: #198754; font-weight: 600; font-size: 1.1em;"><%= order.formattedCurrentTotal || order.formattedTotal %></div>
+              
+              <div class="data-label">Original Total</div>
+              <div class="data-value" style="color: #6c757d; text-decoration: line-through;"><%= order.formattedOriginalTotal || order.formattedTotal %></div>
+              
+              <% if (order.formattedTotalRefunded) { %>
+              <div class="data-label">Amount Refunded</div>
+              <div class="data-value" style="color: #dc3545;">-<%= order.formattedTotalRefunded %></div>
+              <% } %>
+              <% } else { %>
               <div class="data-label">Total</div>
               <div class="data-value"><%= order.formattedTotal %></div>
+              <% } %>
 
               <% if (order.couponCode) { %>
               <div class="data-label">Coupon Applied</div>
               <div class="data-value"><%= order.couponCode %></div>
               <% } %>
+              
+
             </div>
           </div>
         </div>
@@ -999,10 +1014,13 @@
                     <td>
                       <div class="product-cell">
                         <img
-                          src="<%= item.image || '/api/placeholder/60/75' %>"
-                          alt="<%= item.title || 'Product' %>"
+                          src="<%= (item.image) || (item.product && item.product.image) || 'https://via.placeholder.com/60x75?text=No+Image' %>"
+                          alt="<%= (item.title) || (item.product && item.product.title) || 'Product' %>"
                           class="product-image"
-                          onerror="this.src='/api/placeholder/60/75'"
+                          loading="lazy"
+                          onerror="this.onerror=null; this.src='https://via.placeholder.com/60x75?text=No+Image';"
+                          width="60"
+                          height="75"
                         >
                         <div class="product-details">
                           <div class="product-name"><%= item.title || 'Unknown Product' %></div>
@@ -1187,6 +1205,75 @@
 
           <!-- Order summary calculation -->
           <div class="order-summary-calculation">
+            <% if (order.hasPartialCancellation) { %>
+            <!-- Show enhanced summary for partially cancelled orders -->
+            <div class="summary-section">
+              <h6 style="color: #6f42c1; margin-bottom: 1rem; font-weight: 600;">Original Order Summary</h6>
+              
+              <div class="summary-row">
+                <span class="summary-label">Original Subtotal</span>
+                <span class="summary-value"><%= order.formattedSubtotal %></span>
+              </div>
+
+              <% if (order.formattedOfferDiscount) { %>
+              <div class="summary-row">
+                <span class="summary-label">Offer Discount</span>
+                <span class="summary-value discount-text">-<%= order.formattedOfferDiscount %></span>
+              </div>
+              <% } %>
+
+              <% if (order.formattedCouponDiscount) { %>
+              <div class="summary-row">
+                <span class="summary-label">Coupon Discount (<%= order.couponCode %>)</span>
+                <span class="summary-value discount-text">-<%= order.formattedCouponDiscount %></span>
+              </div>
+              <% } %>
+
+              <div class="summary-row">
+                <span class="summary-label">Tax</span>
+                <span class="summary-value"><%= order.formattedTax %></span>
+              </div>
+
+              <div class="summary-row">
+                <span class="summary-label">Shipping</span>
+                <span class="summary-value"><%= order.formattedShipping %></span>
+              </div>
+
+              <div class="total-row" style="border-top: 1px solid #dee2e6; padding-top: 0.5rem; margin-top: 0.5rem;">
+                <span class="total-label">Original Total</span>
+                <span class="total-value" style="color: #6c757d;"><%= order.formattedOriginalTotal || order.formattedTotal %></span>
+              </div>
+            </div>
+
+            <!-- Current Order Status -->
+            <div class="summary-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 2px solid #6f42c1;">
+              <h6 style="color: #198754; margin-bottom: 1rem; font-weight: 600;">Current Order Status</h6>
+              
+              <div class="summary-row">
+                <span class="summary-label">Active Items Value</span>
+                <span class="summary-value" style="color: #198754;"><%= order.formattedActiveSubtotal || order.formattedSubtotal %></span>
+              </div>
+
+              <div class="summary-row">
+                <span class="summary-label">Tax & Shipping</span>
+                <span class="summary-value">₹<%= ((order.totals && order.totals.tax ? order.totals.tax : 0) + (order.totals && order.totals.shipping ? order.totals.shipping : 0)).toFixed(2) %></span>
+              </div>
+
+              <div class="total-row" style="background-color: #f8f9fa; padding: 0.75rem; border-radius: 0.5rem;">
+                <span class="total-label" style="color: #198754;">Current Order Total</span>
+                <span class="total-value" style="color: #198754; font-size: 1.1em;"><%= order.formattedCurrentTotal || order.formattedTotal %></span>
+              </div>
+
+              <% if (order.formattedTotalRefunded) { %>
+              <div class="summary-row" style="color: #dc3545; margin-top: 0.75rem;">
+                <span class="summary-label">Amount Refunded</span>
+                <span class="summary-value">-<%= order.formattedTotalRefunded %></span>
+              </div>
+              <% } %>
+            </div>
+
+            <% } else { %>
+            <!-- Standard summary for orders without cancellations -->
             <div class="summary-row">
               <span class="summary-label">Subtotal</span>
               <span class="summary-value"><%= order.formattedSubtotal %></span>
@@ -1200,7 +1287,7 @@
                   <span class="offer-badge"><%= order.items[0].priceBreakdown.offerTitle %></span>
                 <% } %>
               </span>
-              <span class="summary-value discount-text"><%= order.formattedOfferDiscount %></span>
+              <span class="summary-value discount-text">-<%= order.formattedOfferDiscount %></span>
             </div>
             <% } %>
 
@@ -1212,7 +1299,7 @@
                   <span class="coupon-code"><%= order.couponCode %></span>
                 <% } %>
               </span>
-              <span class="summary-value discount-text"><%= order.formattedCouponDiscount %></span>
+              <span class="summary-value discount-text">-<%= order.formattedCouponDiscount %></span>
             </div>
             <% } %>
 
@@ -1230,25 +1317,6 @@
               <span class="total-label">Total</span>
               <span class="total-value"><%= order.formattedTotal %></span>
             </div>
-
-            <!-- Refund Information - Only count items that actually have refunds -->
-            <%
-              let totalRefunded = 0;
-              order.items.forEach(item => {
-                if ((item.status === 'Cancelled' || item.status === 'Returned') && item.refundAmount && item.refundAmount > 0) {
-                  totalRefunded += item.refundAmount;
-                }
-              });
-            %>
-            <% if (totalRefunded > 0) { %>
-              <div class="summary-row" style="color: #dc3545; border-top: 1px solid #dee2e6; padding-top: 0.5rem; margin-top: 0.5rem;">
-                <span class="summary-label">Total Refunded</span>
-                <span class="summary-value">₹<%= totalRefunded.toFixed(2) %></span>
-              </div>
-              <div class="summary-row">
-                <span class="summary-label">Net Amount</span>
-                <span class="summary-value">₹<%= (order.total - totalRefunded).toFixed(2) %></span>
-              </div>
             <% } %>
           </div>
         </div>

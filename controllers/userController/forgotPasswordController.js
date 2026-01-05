@@ -233,11 +233,19 @@ const patchResetPassword = async (req, res) => {
     }
 
     const hashedPassword = await hashPasswordHelper.hashPassword(newPassword);
-
+              
     user.password = hashedPassword;
     await user.save();
 
-    req.session.destroy();
+    // Only remove user session data, don't destroy entire session
+    delete req.session.user_id;
+    delete req.session.user_email;
+    if (req.session.passport) {
+      delete req.session.passport.user;
+    }
+    
+    // Save the session changes
+    req.session.save();
 
     return res.status(200).json({
       success: true,

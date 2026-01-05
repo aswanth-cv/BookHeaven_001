@@ -219,6 +219,7 @@ const requestEmailUpdate = async(req,res)=>{
             message:"Please provide valid email id"
         })
     }
+    let disposableDomains =[];
     const domain = email.split("@")[1];
     if (disposableDomains.includes(domain)) {
       return res.status(400).json({

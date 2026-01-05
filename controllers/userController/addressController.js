@@ -23,6 +23,7 @@ const getAddress = async(req,res)=>{
 const addresses = async(req,res)=>{
     try {
         const userId = req.session.user_id;
+        const data = req.validatedData || req.body;
         const {
             fullName,
             phone,
@@ -33,43 +34,46 @@ const addresses = async(req,res)=>{
             landmark,
             isDefault,
             returnTo
-        } = req.body;
-        if(!fullName || !phone || !pincode || !district || !state || !street){
-            return res.status(400).json({
-                success:false,
-                message:"All required fields must be filled"
-            })
+        } = data;
+
+        const makeDefault = isDefault === true || isDefault === 'true' || isDefault === 'on';
+
+        if (makeDefault) {
+          await Address.updateMany({ userId }, { isDefault: false });
         }
-        if (isDefault) {
-      await Address.updateMany({ userId }, { isDefault: false });
-    }
 
-    const newAddress = new Address({
-      userId,
-      fullName,
-      phone,
-      pincode,
-      district,
-      state,
-      street,
-      landmark,
-      isDefault: isDefault || false,
-    });
-    await newAddress.save();
-    if (returnTo === "checkout") {
-      return res.status(201).json({
-        success: true,
-        message: "Address added successfully",
-        address: newAddress,
-        redirect: "/checkout",
-      });
-    }
+        const newAddress = new Address({
+          userId,
+          fullName,
+          phone,
+          pincode,
+          district,
+          state,
+          street,
+          landmark,
+          isDefault: makeDefault,
+        });
+        await newAddress.save();
+        
+        const shouldRedirectToCheckout = returnTo === "checkout" || req.session.redirectToCheckout;
+        
+        if (shouldRedirectToCheckout) {
+          // Clear the session flag
+          delete req.session.redirectToCheckout;
+          
+          return res.status(201).json({
+            success: true,
+            message: "Address added successfully",
+            address: newAddress,
+            redirect: "/checkout",
+          });
+        }
 
-    res.status(201).json({
-      success: true,
-      message: "Address added successfully",
-      address: newAddress,
-    });
+        res.status(201).json({
+          success: true,
+          message: "Address added successfully",
+          address: newAddress,
+        });
 
 
 
@@ -203,7 +207,7 @@ const setDefaultAddress = async(req,res)=>{
     }
 
     await Address.updateMany({userId} , {isDefault:false})
-    Address.isDefault = true;
+    address.isDefault = true;
     await address.save();
 
    return res.json({

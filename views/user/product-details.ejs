@@ -23,10 +23,10 @@
           <!-- Thumbnails - Vertical on left side -->
           <div class="col-2">
             <div class="d-flex flex-column thumbnails-container">
-              <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Cover" class="thumbnail active" onclick="changeImage(this, '<%= product.mainImage || '/api/placeholder/600/800' %>')" />
+              <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Cover" class="thumbnail active" data-image="<%= product.mainImage || '/api/placeholder/600/800' %>" onclick="changeImage(this, this.dataset.image)" />
               <% if (product.subImages && product.subImages.length > 0) { %>
                 <% product.subImages.forEach((subImage, index) => { %>
-                  <img src="<%= subImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Image <%= index + 1 %>" class="thumbnail" onclick="changeImage(this, '<%= subImage || '/api/placeholder/600/800' %>')" />
+                  <img src="<%= subImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Image <%= index + 1 %>" class="thumbnail" data-image="<%= subImage || '/api/placeholder/600/800' %>" onclick="changeImage(this, this.dataset.image)" />
                 <% }) %>
               <% } %>
             </div>
@@ -73,7 +73,7 @@
             <% if (product.activeOffer && product.discountPercentage > 0) { %>
               <div class="d-flex align-items-baseline gap-2">
                 <h2 class="fs-3 fw-bold mb-0 text-danger">₹<%= product.finalPrice.toFixed(2) %></h2>
-                <span class="fs-5 text-decoration-line-through text-muted">₹<%= product.regularPrice.toFixed(2) %></span>
+                <span class="fs-5 text-decoration-line-through text-muted">₹<%= product.originalPrice.toFixed(2) %></span>
                 <span class="badge bg-danger">-<%= Math.round(product.discountPercentage) %>% OFF</span>
               </div>
               <div class="offer-details mt-2">
@@ -86,7 +86,7 @@
                 </small>
               </div>
             <% } else { %>
-              <h2 class="fs-3 fw-bold mb-0 text-danger">₹<%= product.regularPrice.toFixed(2) %></h2>
+              <h2 class="fs-3 fw-bold mb-0 text-danger">₹<%= product.finalPrice.toFixed(2) %></h2>
             <% } %>
           </div>
 
@@ -137,6 +137,28 @@
                       <%= locals.isWishlisted ? 'data-wishlisted="true"' : '' %>>
                 <i class="<%= locals.isWishlisted ? 'ri-heart-fill' : 'ri-heart-line' %>"></i>
               </button>
+            </div>
+            
+            <!-- Delivery Information -->
+            <div class="delivery-info mt-4 p-3 bg-light rounded">
+              <div class="d-flex align-items-center mb-2">
+                <i class="ri-truck-line me-2 text-success"></i>
+                <span class="fw-medium">Delivery Information</span>
+              </div>
+              <div class="small text-muted">
+                <div class="mb-1">
+                  <i class="ri-check-line me-1 text-success"></i>
+                  FREE delivery on orders above ₹1000
+                </div>
+                <div class="mb-1">
+                  <i class="ri-money-rupee-circle-line me-1 text-warning"></i>
+                  ₹50 delivery charge for orders below ₹1000
+                </div>
+                <div>
+                  <i class="ri-time-line me-1 text-info"></i>
+                  Estimated delivery: 3-5 business days
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -263,7 +285,7 @@
                       <% if (relatedProduct.activeOffer && relatedProduct.discountPercentage > 0) { %>
                         <div class="d-flex align-items-center gap-2">
                           <span class="fw-bold text-danger">₹<%= relatedProduct.finalPrice.toFixed(2) %></span>
-                          <span class="text-decoration-line-through text-muted small">₹<%= relatedProduct.regularPrice.toFixed(2) %></span>
+                          <span class="text-decoration-line-through text-muted small">₹<%= relatedProduct.originalPrice.toFixed(2) %></span>
                         </div>
                         <small class="text-success d-block"><%= relatedProduct.activeOffer.title %></small>
                       <% } else { %>

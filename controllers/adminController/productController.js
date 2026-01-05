@@ -6,7 +6,7 @@ const fs = require('fs');
 const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 5;
     const search = req.query.search || '';
     const categoryFilter = req.query.category || '';
     const sortBy = req.query.sort || 'newest';
@@ -83,12 +83,10 @@ const addProduct = async (req, res) => {
       return res.status(500).json({ error: 'Invalid category' });
     }
 
-    console.log('Uploaded Files:', req.files);
 
     let mainImageUrl = '';
     if (req.files && req.files.mainImage && req.files.mainImage.length > 0) {
       const file = req.files.mainImage[0];
-      console.log(`Uploading main image from: ${file.path}`);
       mainImageUrl =  '/uploads/' + file.filename;
     } else {
       return res.status(500).json({ error: 'Main image is required' });
@@ -195,20 +193,15 @@ const updateProduct = async (req, res) => {
       isListed,
     } = req.body;
 
-    console.log('Request body:', req.body);
-    console.log('Uploaded files:', req.files);
+    
 
     const product = await Product.findById(productId);
-    console.log('Product found:', product);
     if (!product || product.isDeleted) {
-      console.log('Product not found or deleted');
       return res.status(404).json({ error: 'Product not found' });
     }
 
     const categoryExists = await Category.findById(category);
-    console.log('Category exists:', categoryExists);
     if (!categoryExists) {
-      console.log('Invalid category');
       return res.status(500).json({ error: 'Invalid category' });
     }
 
@@ -229,13 +222,10 @@ const updateProduct = async (req, res) => {
     
     if (req.files && req.files.subImages && req.files.subImages.length > 0) {
       for (const file of req.files.subImages) {
-        console.log("lopp 111");
         
         const pathname = '/uploads/' + file.filename
-        console.log(`Processing sub image: ${pathname}, original name: ${file.originalname}`);
 
         if (processedPaths.has(pathname)) {
-          console.log(`Skipping duplicate sub image path: ${file.path}`);
           continue;
         }
 
@@ -270,7 +260,6 @@ const updateProduct = async (req, res) => {
     product.isListed = isListed === 'on';
 
     await product.save();
-    console.log('Product updated:', product._id);
     res.status(200).json({ message: 'Product updated successfully' });
   } catch (error) {
     console.error('Error updating product:', error);
@@ -282,19 +271,15 @@ const updateProduct = async (req, res) => {
   }
 };
 const softDeleteProduct = async (req, res) => {
-  console.log('Soft delete request received for productId:', req.params.id);
   try {
     const productId = req.params.id;
     const product = await Product.findById(productId);
-    console.log('Product found:', product);
     if (!product) {
-      console.log('Product not found');
       return res.status(404).json({ error: 'Product not found' });
     }
 
     product.isDeleted = true;
     await product.save();
-    console.log('Product soft deleted:', product._id);
     res.status(200).json({ message: 'Product soft deleted successfully' });
   } catch (error) {
     console.error('Error soft deleting product:', error);

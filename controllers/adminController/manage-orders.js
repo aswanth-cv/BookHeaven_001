@@ -2,6 +2,9 @@ const Order = require("../../models/orderSchema");
 const User = require("../../models/userSchema");
 const Product = require("../../models/productSchema");
 
+const { processReturnRefund } = require("../../controllers/userController/walletController");
+const { calculateExactRefundAmount } = require("../../helpers/money-calculator");
+
 
 const getManageOrders = async (req, res) => {
   try {
@@ -10,7 +13,8 @@ const getManageOrders = async (req, res) => {
     const limit = 10 
     const skip = (page - 1) * limit
 
-   
+
+  
     const query = { isDeleted: false }
 
     const validStatuses = ["Placed", "Processing", "Shipped", "Delivered", "Cancelled", "Returned"]
@@ -48,11 +52,34 @@ const getManageOrders = async (req, res) => {
       query.createdAt.$lte = endDate
     }
 
+    // Search by order number, payment method, or customer name
+    const q = (req.query.q || '').trim()
+    if (q) {
+      const userMatches = await User.find({ fullName: { $regex: q, $options: 'i' } }, { _id: 1 }).lean()
+      const userIds = userMatches.map(u => u._id)
+      query.$or = [
+        { orderNumber: { $regex: q, $options: 'i' } },
+        { paymentMethod: { $regex: q, $options: 'i' } },
+        { user: { $in: userIds } }
+      ]
+    }
+
+    // Sorting
+    const sortBy = (req.query.sortBy || 'date').toLowerCase()
+    const sortOrder = (req.query.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1
+    const sortFieldMap = {
+      date: 'createdAt',
+      total: 'total',
+      ordernumber: 'orderNumber'
+    }
+    const sortField = sortFieldMap[sortBy] || 'createdAt'
+    const sortOptions = { [sortField]: sortOrder }
+
     const totalOrders = await Order.countDocuments(query)
 
     const orders = await Order.find(query)
       .populate("user", "fullName")
-      .sort({ createdAt: -1 }) 
+      .sort(sortOptions) 
       .skip(skip)
       .limit(limit)
       .lean()
@@ -65,7 +92,62 @@ const getManageOrders = async (req, res) => {
         month: "short",
         day: "numeric",
       })
-      order.formattedTotal = `₹${order.total.toFixed(2)}`
+      
+      // Calculate current order value (excluding cancelled/returned items)
+      let currentOrderValue = 0;
+      let totalRefunded = 0;
+      let hasAnyCancellations = false;
+      
+      if (order.items && order.items.length > 0) {
+        order.items.forEach(item => {
+          const isItemCancelled = (item.status === 'Cancelled' || item.status === 'Returned');
+          
+          if (isItemCancelled) {
+            hasAnyCancellations = true;
+          }
+          
+          if (!isItemCancelled) {
+            // Add active item value
+            if (item.priceBreakdown && item.priceBreakdown.finalPrice) {
+              currentOrderValue += item.priceBreakdown.finalPrice;
+            } else {
+              const itemPrice = item.discountedPrice || item.price;
+              currentOrderValue += itemPrice * item.quantity;
+            }
+          } else {
+            // Calculate refunded amount (simplified)
+            if (item.priceBreakdown && item.priceBreakdown.finalPrice) {
+              totalRefunded += item.priceBreakdown.finalPrice;
+            } else {
+              const itemPrice = item.discountedPrice || item.price;
+              totalRefunded += itemPrice * item.quantity;
+            }
+          }
+        });
+        
+        // Add tax and shipping to current value only if there are active items
+        if (currentOrderValue > 0) {
+          // For partially cancelled orders, calculate proportional tax
+          if (hasAnyCancellations) {
+            const originalItemsValue = currentOrderValue + totalRefunded;
+            const activeProportion = originalItemsValue > 0 ? currentOrderValue / originalItemsValue : 1;
+            currentOrderValue += ((order.tax || 0) * activeProportion) + (order.shipping || 0);
+          } else {
+            currentOrderValue += (order.tax || 0) + (order.shipping || 0);
+          }
+        }
+      } else {
+        // Fallback to original total if no items data
+        currentOrderValue = order.total;
+      }
+      
+      // Show current order value instead of original total
+      order.currentTotal = currentOrderValue;
+      order.formattedTotal = `₹${currentOrderValue.toFixed(2)}`;
+      order.formattedOriginalTotal = `₹${order.total.toFixed(2)}`;
+      order.hasPartialCancellation = hasAnyCancellations;
+      order.formattedRefunded = totalRefunded > 0 ? `₹${totalRefunded.toFixed(2)}` : null;
+      
       order.customerName = order.user ? order.user.fullName : "Unknown"
     })
 
@@ -86,6 +168,9 @@ const getManageOrders = async (req, res) => {
       max_amount: req.query.max_amount || "",
       start_date: req.query.start_date || "",
       end_date: req.query.end_date || "",
+      q: q || "",
+      sortBy: req.query.sortBy || 'date',
+      sortOrder: req.query.sortOrder || 'desc',
     }
 
     res.render("manage-orders", {
@@ -529,39 +614,76 @@ const getOrderDetails = async (req, res) => {
       return item;
     });
 
+    // Calculate totals properly accounting for cancelled/returned items
     const totals = {
-      subtotal: 0,
-      offerDiscount: 0,
-      couponDiscount: 0,
+      originalSubtotal: 0,      // Original subtotal of all items
+      activeSubtotal: 0,        // Subtotal of only active items
+      offerDiscount: 0,         // Total offer discounts on active items
+      couponDiscount: 0,        // Total coupon discounts on active items
       tax: Number(order.tax || 0),
       shipping: Number(order.shipping || 0),
-      totalRefunded: 0
+      totalRefunded: 0,         // Total amount refunded for cancelled/returned items
+      currentOrderValue: 0      // Current value of active items only
     };
 
-    order.items.forEach(item => {
-      if (item.priceBreakdown) {
-        totals.subtotal += item.totalOriginalPrice;
-        totals.offerDiscount += item.totalOfferSavings;
-        totals.couponDiscount += item.totalCouponSavings;
+    let hasAnyCancellations = false;
 
-        if (item.status === 'Cancelled' || item.status === 'Returned') {
-          if (item.refundAmount && item.refundAmount > 0) {
-            totals.totalRefunded += item.refundAmount;
-          }
+    // Calculate totals for all items
+    order.items.forEach(item => {
+      // Check if this item is cancelled or returned
+      const isItemCancelled = (item.status === 'Cancelled' || item.status === 'Returned');
+      if (isItemCancelled) {
+        hasAnyCancellations = true;
+      }
+
+      if (item.priceBreakdown) {
+        // Add to original totals (all items)
+        totals.originalSubtotal += item.totalOriginalPrice;
+        
+        // Only add to active totals if item is not cancelled/returned
+        if (!isItemCancelled) {
+          totals.activeSubtotal += item.totalOriginalPrice;
+          totals.offerDiscount += item.totalOfferSavings;
+          totals.couponDiscount += item.totalCouponSavings;
+          totals.currentOrderValue += item.totalFinalPrice;
+        }
+
+        // Add refund amounts for cancelled/returned items
+        if (isItemCancelled && item.refundAmount && item.refundAmount > 0) {
+          totals.totalRefunded += item.refundAmount;
         }
       } else {
-        totals.subtotal += item.totalOriginalPrice;
-        totals.offerDiscount += (item.totalOriginalPrice - item.totalDiscountedPrice);
+        // Fallback for items without priceBreakdown
+        totals.originalSubtotal += item.totalOriginalPrice;
+        
+        if (!isItemCancelled) {
+          totals.activeSubtotal += item.totalOriginalPrice;
+          totals.offerDiscount += (item.totalOriginalPrice - item.totalDiscountedPrice);
+          totals.currentOrderValue += item.totalDiscountedPrice;
+        }
 
-        if (item.status === 'Cancelled' || item.status === 'Returned') {
-          if (item.refundAmount && item.refundAmount > 0) {
-            totals.totalRefunded += item.refundAmount;
-          }
+        if (isItemCancelled && item.refundAmount && item.refundAmount > 0) {
+          totals.totalRefunded += item.refundAmount;
         }
       }
     });
 
-   
+    // Calculate current order total (active items + tax + shipping)
+    // For partially cancelled orders, we need to proportionally calculate tax
+    let currentTax = totals.tax;
+    let currentShipping = totals.shipping;
+    
+    if (hasAnyCancellations && totals.originalSubtotal > 0) {
+      // Calculate proportional tax based on active items
+      const activeProportion = totals.currentOrderValue / (totals.originalSubtotal - (order.discount || 0) - (order.couponDiscount || 0));
+      currentTax = totals.tax * activeProportion;
+      // Shipping is usually fixed, but you might want to adjust this logic
+      currentShipping = totals.shipping; // Keep full shipping for now
+    }
+
+    const currentOrderTotal = totals.currentOrderValue + currentTax + currentShipping;
+
+    // Use stored values for display consistency, but show current values for active items
     let recalculatedSubtotal = 0;
     order.items.forEach(item => {
       if (item.priceBreakdown) {
@@ -578,15 +700,30 @@ const getOrderDetails = async (req, res) => {
     const useStoredTotal = order.total && Math.abs(order.total - correctTotal) < 0.01;
     const displayTotal = useStoredTotal ? order.total : correctTotal;
 
-    order.total = displayTotal;
+    // Set order totals for display
+    order.originalTotal = displayTotal;  // Original order total
+    order.currentTotal = hasAnyCancellations ? currentOrderTotal : displayTotal;  // Current active order total
+    order.total = displayTotal; // Keep original for compatibility
 
+    // Format all totals for display
+    order.formattedOriginalSubtotal = `₹${displaySubtotal.toFixed(2)}`;
+    order.formattedActiveSubtotal = `₹${totals.activeSubtotal.toFixed(2)}`;
     order.formattedSubtotal = `₹${displaySubtotal.toFixed(2)}`;
     order.formattedOfferDiscount = totals.offerDiscount > 0 ? `₹${totals.offerDiscount.toFixed(2)}` : null;
     order.formattedCouponDiscount = totals.couponDiscount > 0 ? `₹${totals.couponDiscount.toFixed(2)}` : null;
     order.formattedTax = `₹${totals.tax.toFixed(2)}`;
+    order.formattedCurrentTax = `₹${currentTax.toFixed(2)}`;
     order.formattedShipping = totals.shipping > 0 ? `₹${totals.shipping.toFixed(2)}` : 'Free';
-    order.formattedTotal = `₹${displayTotal.toFixed(2)}`;
+    order.formattedOriginalTotal = `₹${displayTotal.toFixed(2)}`;
+    order.formattedCurrentTotal = `₹${currentOrderTotal.toFixed(2)}`;
+    order.formattedTotal = hasAnyCancellations ? `₹${currentOrderTotal.toFixed(2)}` : `₹${displayTotal.toFixed(2)}`;
     order.formattedTotalRefunded = totals.totalRefunded > 0 ? `₹${totals.totalRefunded.toFixed(2)}` : null;
+    order.formattedNetAmount = `₹${(displayTotal - totals.totalRefunded).toFixed(2)}`;
+
+    // Add summary data for the view
+    order.totals = totals;
+    order.hasPartialCancellation = hasAnyCancellations;
+    order.currentOrderValue = currentOrderTotal;
 
     const hasActiveItems = order.items.some(item =>
       item.status !== 'Cancelled' && item.status !== 'Returned'
@@ -688,11 +825,153 @@ const getOrderDetails = async (req, res) => {
   }
 };
 
+const approveReturnRequest = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { itemId, approved } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order || order.isDeleted) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (itemId) {
+      const item = order.items.id(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Item not found in order" });
+      }
+
+      if (item.status !== 'Return Requested') {
+        return res.status(400).json({
+          message: `Cannot process return for item with status ${item.status}`
+        });
+      }
+
+      const now = new Date();
+
+      if (approved) {
+        item.status = 'Returned';
+        item.returnedAt = now;
+
+        await Product.findByIdAndUpdate(
+          item.product,
+          { $inc: { stock: item.quantity } }
+        );
+
+        if (order.paymentStatus === 'Paid') {
+          const refundSuccess = await processReturnRefund(order.user, order, itemId);
+          if (refundSuccess) {
+            const allItemsRefunded = order.items.every(i =>
+              i.status === 'Returned' || i.status === 'Cancelled'
+            );
+            order.paymentStatus = allItemsRefunded ? 'Refunded' : 'Partially Refunded';
+          } else {
+            order.paymentStatus = 'Refund Processing';
+          }
+        } else {
+        }
+      } else {
+        item.status = 'Active';
+        item.returnRequestedAt = null;
+        item.returnReason = null;
+      }
+
+      const hasActiveItems = order.items.some(i => i.status === 'Active');
+      const hasReturnRequestedItems = order.items.some(i => i.status === 'Return Requested');
+      const hasCancelledItems = order.items.some(i => i.status === 'Cancelled');
+      const hasReturnedItems = order.items.some(i => i.status === 'Returned');
+
+      if (!hasActiveItems && !hasReturnRequestedItems) {
+        if (hasReturnedItems && !hasCancelledItems) {
+          order.orderStatus = 'Returned';
+        } else if (hasCancelledItems && !hasReturnedItems) {
+          order.orderStatus = 'Cancelled';
+        } else {
+          order.orderStatus = 'Delivered';
+        }
+      } else if (hasReturnRequestedItems) {
+
+      } else {
+        order.orderStatus = 'Delivered';
+      }
+
+      await order.save();
+      return res.status(200).json({
+        message: approved ? "Return request approved" : "Return request rejected",
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus
+      });
+    }
+
+    if (order.orderStatus !== 'Return Requested') {
+      return res.status(401).json({
+        message: `Cannot process return for order with status ${order.orderStatus}`
+      });
+    }
+
+    const now = new Date();
+
+    if (approved) {
+      for (const item of order.items) {
+        if (item.status === 'Return Requested') {
+          item.status = 'Returned';
+          item.returnedAt = now;
+
+          try {
+            await Product.findByIdAndUpdate(
+              item.product,
+              { $inc: { stock: item.quantity } }
+            );
+          } catch (error) {
+            console.error('Error restoring stock:', error);
+          }
+        }
+      }
+
+      const hasActiveItems = order.items.some(i => i.status === 'Active');
+      order.orderStatus = hasActiveItems ? 'Delivered' : 'Returned';
+
+      if (order.paymentStatus === 'Paid') {
+        const refundSuccess = await processReturnRefund(order.user, order);
+        if (refundSuccess) {
+          order.paymentStatus = hasActiveItems ? 'Partially Refunded' : 'Refunded';
+        } else {
+          console.error(`Failed to process refund for returned items in order ${order._id}`);
+        }
+      }
+
+      order.returnedAt = now;
+    } else {
+      order.items.forEach(item => {
+        if (item.status === 'Return Requested') {
+          item.status = 'Active';
+          item.returnRequestedAt = null;
+          item.returnReason = null;
+        }
+      });
+
+      order.orderStatus = 'Delivered';
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      message: approved ? "All return requests approved" : "All return requests rejected",
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus
+    });
+  } catch (error) {
+    console.error("Error processing return request:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 
 
 module.exports = {
     getManageOrders,
     updateOrderStatus,
     updateItemStatus,
-    getOrderDetails
+    getOrderDetails,
+    approveReturnRequest
 }

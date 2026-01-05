@@ -61,7 +61,6 @@ app.use('/validators', express.static(path.join(__dirname, 'validators')));
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(methodOverride('_method'));
-
 app.use("/", userRouter);
 app.use('/admin', adminRoute)
 

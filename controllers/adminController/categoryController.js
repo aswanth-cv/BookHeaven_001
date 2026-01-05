@@ -9,6 +9,7 @@ const getCategory = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const query = {
+         
       $or: [
         { name: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
