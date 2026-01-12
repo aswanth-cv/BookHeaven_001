@@ -2,143 +2,211 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Invoice - Chapterless</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invoice - BookHaven</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 40px;
-      color: #333;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 24px;
+      color: #1f2937;
+      background: #fff;
     }
     .invoice-box {
-      border: 1px solid #ddd;
-      padding: 30px;
-      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+      padding: 28px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
     }
-    .logo-section {
+    .brand {
       display: flex;
       align-items: center;
+      gap: 12px;
     }
-    .logo-img {
-      height: 55px;
-      margin-right: 10px;
+    .brand .logo-img {
+      height: 52px;
+      width: 52px;
+      object-fit: cover;
+      border-radius: 8px;
     }
-    .brand-name {
-      font-weight: 700;
+    .brand .brand-name {
+      font-weight: 800;
       font-size: 24px;
-      color: #212529;
+      letter-spacing: 0.3px;
+      color: #111827;
     }
     .slogan {
-      text-transform: uppercase;
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .section-title {
       font-size: 14px;
-      color: #6c757d;
-      margin-left: 65px;
-      margin-top: -5px;
+      letter-spacing: 0.6px;
+      color: #6b7280;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }
-    .table th, .table td {
+    .card-like {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: #fafafa;
+    }
+    .table thead th {
+      background: #f3f4f6;
+      color: #374151;
+      border-bottom: 1px solid #e5e7eb;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .table tbody td {
       vertical-align: middle;
+      font-size: 14px;
     }
-    .total {
-      font-weight: 600;
-      font-size: 18px;
+    .totals {
+      max-width: 420px;
+      margin-left: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .totals .row-line {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #fff;
+      border-bottom: 1px dashed #e5e7eb;
+      font-size: 14px;
+    }
+    .totals .row-line:last-child {
+      border-bottom: none;
+    }
+    .totals .grand {
+      background: #f9fafb;
+      font-weight: 800;
+      font-size: 16px;
+      color: #111827;
     }
     footer {
       text-align: center;
-      margin-top: 40px;
-      font-size: 13px;
-      color: #666;
+      margin-top: 28px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .muted {
+      color: #6b7280;
     }
   </style>
 </head>
 <body>
   <div class="invoice-box">
-    <!-- Logo, Brand & Slogan -->
-    <div class="mb-3">
-      <div class="logo-section">
-        <img src="/assets/harryPotter.jpeg" alt="Chapterless Logo" class="logo-img">
-        <div class="brand-name">Chapterless</div>
+    <!-- Header: Brand and Invoice meta -->
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <div class="brand">
+          <img src="/assets/harryPotter.jpeg" alt="BookHaven Logo" class="logo-img">
+          <div>
+            <div class="brand-name">BookHaven</div>
+            <div class="slogan">Where Stories Find Lost Souls</div>
+          </div>
+        </div>
       </div>
-      <div class="slogan">Where Stories Find Lost Souls</div>
-    </div>
-
-    <!-- Invoice Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <div></div>
       <div class="text-end">
-        <strong>Invoice #: </strong> <%= order.orderNumber %><br>
-        <strong>Date:</strong> <%= order.formattedDate %>
+        <div class="section-title">Invoice</div>
+        <div><strong>Invoice #:</strong> <%= order.orderNumber %></div>
+        <div><strong>Date:</strong> <%= order.formattedDate %></div>
+        <% if (order.orderStatus) { %>
+          <div><strong>Status:</strong> <%= order.orderStatus %></div>
+        <% } %>
       </div>
     </div>
 
-    <!-- Billing Details -->
-    <div class="mb-4">
-      <h5>Billing To:</h5>
-      <p>
-        <strong><%= order.shippingAddress.fullName || 'N/A' %></strong><br>
-        <%= order.shippingAddress.street || '' %><br>
-        <% if (order.shippingAddress.landmark) { %>
-          <%= order.shippingAddress.landmark %><br>
-        <% } %>
-        <%= order.shippingAddress.city || '' %>, <%= order.shippingAddress.state || '' %> <%= order.shippingAddress.pinCode || '' %><br>
-        <%= order.shippingAddress.country || '' %><br>
-        <%= user.email || '' %>
-      </p>
+    <!-- Addresses and meta info -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-7">
+        <div class="section-title">Delivery Address</div>
+        <div class="card-like">
+          <div class="fw-semibold"><%= order.shippingAddress?.fullName || 'N/A' %></div>
+          <div><%= order.shippingAddress?.street || '' %></div>
+          <% if (order.shippingAddress?.landmark) { %>
+            <div><%= order.shippingAddress.landmark %></div>
+          <% } %>
+          <div>
+            <%= order.shippingAddress?.city || '' %>,
+            <%= order.shippingAddress?.state || '' %>
+            <%= order.shippingAddress?.pinCode || '' %>
+          </div>
+          <div><%= order.shippingAddress?.country || '' %></div>
+          <div class="muted"><%= user.email || '' %></div>
+        </div>
+      </div>
+      <div class="col-md-5">
+        <div class="section-title">Order Summary</div>
+        <div class="card-like">
+          <div class="d-flex justify-content-between"><span class="muted">Order #</span> <span><%= order.orderNumber %></span></div>
+          <div class="d-flex justify-content-between"><span class="muted">Order Date</span> <span><%= order.formattedDate %></span></div>
+          <div class="d-flex justify-content-between"><span class="muted">Payment</span> <span><%= order.paymentMethod || 'Cash on Delivery' %></span></div>
+          <% if (order.couponCode) { %>
+            <div class="d-flex justify-content-between"><span class="muted">Coupon</span> <span><%= order.couponCode %></span></div>
+          <% } %>
+        </div>
+      </div>
     </div>
 
-    <!-- Order Items Table -->
-    <table class="table table-bordered">
-      <thead class="table-light">
-        <tr>
-          <th>Book</th>
-          <th>Price</th>
-          <th>Qty</th>
-          <th>Subtotal</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% order.items.forEach(item => { %>
+    <!-- Items table -->
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead>
           <tr>
-            <td><%= item.title || 'Unknown Product' %></td>
-            <td>₹<%= item.price.toFixed(2) %></td>
-            <td><%= item.quantity || 1 %></td>
-            <td>₹<%= (item.price * item.quantity).toFixed(2) %></td>
+            <th style="width: 56px;">#</th>
+            <th>Book</th>
+            <th class="text-end" style="width: 120px;">Unit Price</th>
+            <th class="text-end" style="width: 80px;">Qty</th>
+            <th class="text-end" style="width: 140px;">Line Total</th>
           </tr>
-        <% }) %>
-        <tr>
-          <td colspan="3" class="text-end">Subtotal</td>
-          <td><%= order.formattedSubtotal %></td>
-        </tr>
-        <% if (order.discount && order.discount > 0) { %>
-          <tr>
-            <td colspan="3" class="text-end text-success">Offer Discount</td>
-            <td class="text-success">-<%= order.formattedDiscount %></td>
-          </tr>
-        <% } %>
-        <% if (order.couponDiscount && order.couponDiscount > 0) { %>
-          <tr>
-            <td colspan="3" class="text-end text-primary">Coupon Discount <%= order.couponCode ? `(${order.couponCode})` : '' %></td>
-            <td class="text-primary">-<%= order.formattedCouponDiscount %></td>
-          </tr>
-        <% } %>
-        <tr>
-          <td colspan="3" class="text-end">Tax</td>
-          <td><%= order.formattedTax %></td>
-        </tr>
-        <tr>
-          <td colspan="3" class="text-end total">Total</td>
-          <td class="total"><%= order.formattedTotal %></td>
-        </tr>
-        <tr>
-          <td colspan="3" class="text-end">Payment Method</td>
-          <td><%= order.paymentMethod || 'Cash on Delivery' %></td>
-        </tr>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          <% order.items.forEach((item, idx) => { %>
+            <tr>
+              <td><%= idx + 1 %></td>
+              <td><%= item.title || 'Unknown Product' %></td>
+              <td class="text-end">₹<%= Number(item.price).toFixed(2) %></td>
+              <td class="text-end"><%= item.quantity || 1 %></td>
+              <td class="text-end">₹<%= (Number(item.price) * (item.quantity || 1)).toFixed(2) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <% if (order.items.length === 0) { %>
+        <div class="text-center text-muted py-3">
+          <em>No active items to display in invoice</em>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- Totals -->
+    <div class="totals mt-3">
+      <div class="row-line"><span>Subtotal</span><span><%= order.formattedSubtotal %></span></div>
+      <% if ((order.discount || 0) > 0) { %>
+        <div class="row-line"><span class="text-success">Offer Discount</span><span class="text-success">-<%= order.formattedDiscount %></span></div>
+      <% } %>
+      <% if ((order.couponDiscount || 0) > 0) { %>
+        <div class="row-line"><span class="text-primary">Coupon Discount <%= order.couponCode ? `(${order.couponCode})` : '' %></span><span class="text-primary">-<%= order.formattedCouponDiscount %></span></div>
+      <% } %>
+      <div class="row-line"><span>Tax</span><span><%= order.formattedTax %></span></div>
+      <% if (typeof order.shipping !== 'undefined' && Number(order.shipping) > 0) { %>
+        <div class="row-line"><span>Shipping</span><span>₹<%= Number(order.shipping).toFixed(2) %></span></div>
+      <% } %>
+      <div class="row-line grand"><span>Total</span><span><%= order.formattedTotal %></span></div>
+      <div class="row-line"><span>Payment Method</span><span><%= order.paymentMethod || 'Cash on Delivery' %></span></div>
+    </div>
 
     <!-- Footer -->
     <footer>
-      This is a computer-generated invoice and does not require a signature.<br>
-      Thank you for shopping at <strong>Chapterless</strong> 📚
+      This is a computer-generated invoice and does not require a signature.<br />
+      <small class="text-muted">Note: Canceled and returned items are excluded from this invoice.</small><br />
+      Thank you for shopping at <strong>BookHaven</strong> 📚
     </footer>
   </div>
 </body>

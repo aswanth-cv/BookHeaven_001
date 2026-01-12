@@ -1,4 +1,5 @@
 
+const { ErrorMessages } = require("./error-messages");
 
 const VALIDATION_PATTERNS = {
   EMAIL: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
@@ -33,16 +34,16 @@ const sanitizeInput = (input) => {
 
 
 const validateEmail = (email) => {
-  if (!email) return { isValid: false, message: 'Email is required' };
+  if (!email) return { isValid: false, message: ErrorMessages.VALIDATION.REQUIRED_FIELD };
   
   const sanitized = sanitizeInput(email).toLowerCase();
   
   if (sanitized.length > VALIDATION_RULES.EMAIL.max) {
-    return { isValid: false, message: 'Email is too long' };
+    return { isValid: false, message: ErrorMessages.VALIDATION.MAX_LENGTH };
   }
   
   if (!VALIDATION_PATTERNS.EMAIL.test(sanitized)) {
-    return { isValid: false, message: 'Invalid email format' };
+    return { isValid: false, message: ErrorMessages.VALIDATION.INVALID_EMAIL };
   }
   
   return { isValid: true, sanitized };

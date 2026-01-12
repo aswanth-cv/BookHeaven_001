@@ -563,6 +563,36 @@
           <form id="filter-form" action="/admin/getOrders" method="GET">
             <div class="filters">
               <div class="filter-group">
+                <label class="filter-label">Search</label>
+                <div style="display:flex; gap:0.5rem;">
+                  <input
+                    type="text"
+                    class="filter-input"
+                    name="q"
+                    placeholder="Search by Order ID, Customer, Payment"
+                    value="<%= (filters.q || '') %>"
+                  />
+                  <button type="button" class="btn btn-reset" id="clear-search">Clear</button>
+                </div>
+              </div>
+
+              <div class="filter-group">
+                <label class="filter-label">Sort By</label>
+                <select class="filter-select" name="sortBy">
+                  <option value="date" <%= (filters.sortBy || 'date') === 'date' ? 'selected' : '' %>>Date</option>
+                  <option value="total" <%= filters.sortBy === 'total' ? 'selected' : '' %>>Total</option>
+                  <option value="orderNumber" <%= filters.sortBy === 'orderNumber' ? 'selected' : '' %>>Order ID</option>
+                </select>
+              </div>
+
+              <div class="filter-group">
+                <label class="filter-label">Sort Order</label>
+                <select class="filter-select" name="sortOrder">
+                  <option value="desc" <%= (filters.sortOrder || 'desc') === 'desc' ? 'selected' : '' %>>Descending</option>
+                  <option value="asc" <%= filters.sortOrder === 'asc' ? 'selected' : '' %>>Ascending</option>
+                </select>
+              </div>
+              <div class="filter-group">
                 <label class="filter-label">Order Status</label>
                 <select class="filter-select" name="status">
                   <option value="" <%= filters.status === '' ? 'selected' : '' %>>All Statuses</option>
@@ -579,7 +609,7 @@
                 </select>
               </div>
 
-              <div class="filter-group">
+              <!-- <div class="filter-group">
                 <label class="filter-label">Payment Method</label>
                 <select class="filter-select" name="payment">
                   <option value="" <%= filters.payment === '' ? 'selected' : '' %>>All Methods</option>
@@ -588,9 +618,9 @@
                   <option value="WALLET" <%= filters.payment === 'Wallet' ? 'selected' : '' %>>Wallet</option>
                   <option value="UPI" <%= filters.payment === 'UPI' ? 'selected' : '' %>>UPI/Net Banking</option>
                 </select>
-              </div>
+              </div> -->
 
-              <div class="filter-group">
+              <!-- <div class="filter-group">
                 <label class="filter-label">Order Amount</label>
                 <div class="filter-date">
                   <input
@@ -608,9 +638,9 @@
                     value="<%= filters.max_amount %>"
                   />
                 </div>
-              </div>
+              </div> -->
 
-              <div class="filter-group">
+              <!-- <div class="filter-group">
                 <label class="filter-label">Order Date</label>
                 <div class="filter-date">
                   <div class="date-input-container">
@@ -638,7 +668,7 @@
                     <i class="fas fa-calendar"></i>
                   </div>
                 </div>
-              </div>
+              </div> -->
             </div>
 
             <div class="buttons">
@@ -668,7 +698,19 @@
                     <td>#<%= order.orderNumber %></td>
                     <td><%= order.customerName %></td>
                     <td><%= order.formattedDate %></td>
-                    <td><%= order.formattedTotal %></td>
+                    <td>
+                      <% if (order.hasPartialCancellation) { %>
+                        <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                          <span style="color: #198754; font-weight: 600;"><%= order.formattedTotal %></span>
+                          <small style="color: #6c757d; text-decoration: line-through;"><%= order.formattedOriginalTotal %></small>
+                          <% if (order.formattedRefunded) { %>
+                            <small style="color: #dc3545;">Refunded: <%= order.formattedRefunded %></small>
+                          <% } %>
+                        </div>
+                      <% } else { %>
+                        <%= order.formattedTotal %>
+                      <% } %>
+                    </td>
                     <td><%= order.paymentMethod || 'N/A' %></td>
                     <td>
                       <% 
@@ -821,7 +863,7 @@
           <div class="pagination-info">
             <p>Showing <%= orders.length %> of <%= pagination.totalPages * 10 %> orders (Page <%= pagination.currentPage %> of <%= pagination.totalPages %>)</p>
             <div class="pagination">
-              <a href="?page=<%= pagination.prevPage %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>" class="page-btn prev-btn <%= pagination.hasPrev ? '' : 'disabled' %>">
+              <a href="?page=<%= pagination.prevPage %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&q=<%= filters.q %>&sortBy=<%= filters.sortBy %>&sortOrder=<%= filters.sortOrder %>" class="page-btn prev-btn <%= pagination.hasPrev ? '' : 'disabled' %>">
                 <i class="fas fa-chevron-left"></i> Previous
               </a>
               
@@ -830,7 +872,7 @@
                       pageNum === 1 || 
                       pageNum === pagination.totalPages || 
                       (pageNum >= pagination.currentPage - 1 && pageNum <= pagination.currentPage + 1)) { %>
-                  <a href="?page=<%= pageNum %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>" class="page-btn page-number <%= pagination.currentPage === pageNum ? 'active' : '' %>">
+                  <a href="?page=<%= pageNum %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&q=<%= filters.q %>&sortBy=<%= filters.sortBy %>&sortOrder=<%= filters.sortOrder %>" class="page-btn page-number <%= pagination.currentPage === pageNum ? 'active' : '' %>">
                     <%= pageNum %>
                   </a>
                 <% } else if (
@@ -841,7 +883,7 @@
                 <% } %>
               <% }) %>
               
-              <a href="?page=<%= pagination.nextPage %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>" class="page-btn next-btn <%= pagination.hasNext ? '' : 'disabled' %>">
+              <a href="?page=<%= pagination.nextPage %>&status=<%= filters.status %>&payment=<%= filters.payment %>&min_amount=<%= filters.min_amount %>&max_amount=<%= filters.max_amount %>&start_date=<%= filters.start_date %>&end_date=<%= filters.end_date %>&q=<%= filters.q %>&sortBy=<%= filters.sortBy %>&sortOrder=<%= filters.sortOrder %>" class="page-btn next-btn <%= pagination.hasNext ? '' : 'disabled' %>">
                 Next <i class="fas fa-chevron-right"></i>
               </a>
             </div>
@@ -857,6 +899,14 @@
 
         // Filter form submission
         const filterForm = document.getElementById('filter-form');
+        const clearSearchBtn = document.getElementById('clear-search');
+        if (clearSearchBtn) {
+          clearSearchBtn.addEventListener('click', function() {
+            const qInput = filterForm.querySelector('input[name="q"]');
+            if (qInput) qInput.value = '';
+            filterForm.submit();
+          });
+        }
         
         // Reset filters
         filterForm.addEventListener('reset', function(e) {

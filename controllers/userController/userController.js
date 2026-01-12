@@ -1,5 +1,7 @@
 const categoryController = require("../../controllers/userController/categoryController");
 const Product = require('../../models/productSchema');
+const { getActiveOfferForProduct, calculateDiscount } = require('../../utils/offer-helper');
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 const pageNotFound = async (req, res) => {
@@ -25,6 +27,56 @@ const loadHomePage = async (req, res) => {
       .sort({ createdAt: -1  }) 
       .limit(LIMIT);
 
+    // Apply offers to top selling products
+    for (const product of topSellingProducts) {
+      const offer = await getActiveOfferForProduct(
+        product._id,
+        product.category._id,
+        product.salePrice
+      );
+
+      if (offer) {
+        const { discountAmount, discountPercentage, finalPrice } = calculateDiscount(offer, product.salePrice);
+        
+        product.originalPrice = product.salePrice;
+        product.finalPrice = finalPrice;
+        product.activeOffer = offer;
+        product.discountAmount = discountAmount;
+        product.discountPercentage = discountPercentage;
+      } else {
+        product.originalPrice = product.salePrice;
+        product.finalPrice = product.salePrice;
+        product.activeOffer = null;
+        product.discountAmount = 0;
+        product.discountPercentage = 0;
+      }
+    }
+
+    // Apply offers to new arrivals
+    for (const product of newArrivals) {
+      const offer = await getActiveOfferForProduct(
+        product._id,
+        product.category._id,
+        product.salePrice
+      );
+
+      if (offer) {
+        const { discountAmount, discountPercentage, finalPrice } = calculateDiscount(offer, product.salePrice);
+        
+        product.originalPrice = product.salePrice;
+        product.finalPrice = finalPrice;
+        product.activeOffer = offer;
+        product.discountAmount = discountAmount;
+        product.discountPercentage = discountPercentage;
+      } else {
+        product.originalPrice = product.salePrice;
+        product.finalPrice = product.salePrice;
+        product.activeOffer = null;
+        product.discountAmount = 0;
+        product.discountPercentage = 0;
+      }
+    }
+
 
     return res.render("home", {
       categories,
@@ -36,7 +88,7 @@ const loadHomePage = async (req, res) => {
 
 
   } catch (error) {
-    res.status(500).send("Server Error");
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Server Error");
   }
 };
 
@@ -44,7 +96,7 @@ const getAboutPage = async (req, res) => {
   try {
     res.render("about");
   } catch (error) {
-    res.status(500).send("Server Error");
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Server Error");
   }
 };
 

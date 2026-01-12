@@ -1,5 +1,6 @@
 const User = require("../../models/userSchema");
 const bcrypt = require("bcrypt");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const getAdminLogin = async (req, res) => {
   try {
@@ -10,7 +11,7 @@ const getAdminLogin = async (req, res) => {
     res.render("adminLogin");
   } catch (error) {
     console.error("Error loading admin login page:", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal Server Error",
     });
@@ -24,14 +25,14 @@ const postAdminLogin = async (req, res) => {
     const admin = await User.findOne({ email, isAdmin: true });
 
     if (!admin) {
-      return res.status(400).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: "Admin not found or not authorized",
       });
     }
 
     if (admin.isBlocked) {
-      return res.status(400).json({
+      return res.status(HttpStatus.FORBIDDEN).json({
         success: false,
         message: "This admin account has been blocked",
       });
@@ -40,7 +41,7 @@ const postAdminLogin = async (req, res) => {
     const isMatch = await bcrypt.compare(password, admin.password);
 
     if (!isMatch) {
-      return res.status(400).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: "Invalid credentials",
       });
@@ -48,14 +49,14 @@ const postAdminLogin = async (req, res) => {
 
     req.session.admin_id = admin._id;
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: "Welcome Admin",
       redirectTo: '/admin/adminDashboard',
     });
   } catch (error) {
     console.error("Admin login error:", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Admin login error",
     });
@@ -65,19 +66,23 @@ const postAdminLogin = async (req, res) => {
 
 const logoutAdminDashboard = async (req, res) => {
   try {
-    req.session.destroy((error) => {
+    delete req.session.admin_id;
+    
+    req.session.save((error) => {
       if (error) {
-        console.error('Error destroying session:', error);
-        return res.status(500).send('Logout Failed');
+        console.error('Error saving session after admin logout:', error);
+        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Logout Failed');
       }
-
-
-      res.clearCookie('connect.sid');
+      
+      res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+      res.header('Pragma', 'no-cache');
+      res.header('Expires', '0');
+      
       res.redirect('/admin/adminLogin');
     });
   } catch (error) {
     console.error('Error in AdminLogout:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Internal Server Error' });
   }
 };
 

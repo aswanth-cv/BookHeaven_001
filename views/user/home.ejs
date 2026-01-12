@@ -6,9 +6,13 @@
     <div class="hero-content text-white">
       <h1 class="display-4 fw-bold mb-4">Discover Stories That Find You</h1>
       <p class="fs-5 mb-4">WHERE STORIES FIND LOST SOULS</p>
-      <div class="d-flex flex-column flex-sm-row gap-3">
+      <div class="d-flex flex-column flex-sm-row gap-3 mb-3">
         <!-- <a href="/shopPage" class="btn btn-light px-4 py-2 fw-medium">Shop Now</a> -->
         <a href="/shopPage" class="btn btn-outline-light px-4 py-2 fw-medium">Explore Collections</a>
+      </div>
+      <div class="d-flex align-items-center text-white-75">
+        <i class="ri-truck-line me-2"></i>
+        <small>FREE delivery on orders above ₹1000</small>
       </div>
     </div>
   </div>
@@ -78,11 +82,11 @@
                     <% if (product.activeOffer) { %>
                       <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
-                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.originalPrice.toFixed(2) %></span>
                       </div>
                       <small class="text-success d-block"><%= product.activeOffer.title %></small>
                     <% } else { %>
-                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                     <% } %>
                   </div>
                   <div class="d-flex gap-2 align-items-center">
@@ -142,11 +146,11 @@
                     <% if (product.activeOffer) { %>
                       <div class="d-flex align-items-center gap-2">
                         <span class="fw-bold text-danger">₹<%= product.finalPrice.toFixed(2) %></span>
-                        <span class="text-decoration-line-through text-muted small">₹<%= product.regularPrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted small">₹<%= product.originalPrice.toFixed(2) %></span>
                       </div>
                       <small class="text-success d-block"><%= product.activeOffer.title %></small>
                     <% } else { %>
-                      <span class="fw-bold">₹<%= product.regularPrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                     <% } %>
                   </div>
                   <div class="d-flex gap-2 align-items-center">
@@ -318,7 +322,7 @@
           console.log('Response result:', result);
 
           // Check if it's a 401 Unauthorized or authentication error
-          if (response.status === 401 || !result.success) {
+          if (response.status === 401 && (result.requiresAuth || result.message === 'Please log in to add items to your cart')) {
             // Debug logging
             console.log('Authentication error detected');
             console.log('Status:', response.status);
@@ -356,8 +360,8 @@
             console.log('Message:', result.message);
             console.log('RequiresAuth:', result.requiresAuth);
 
-            // Check if it's an authentication error
-            if (result.message === 'Please log in to add items to your cart' || result.requiresAuth) {
+            // Handle different types of errors
+            if (result.requiresAuth || result.message === 'Please log in to add items to your cart') {
               console.log('Authentication required - redirecting to login');
               Swal.fire({
                 toast: true,
@@ -369,6 +373,26 @@
               }).then(() => {
                 console.log('Redirecting to login...');
                 window.location.href = '/login';
+              });
+            } else if (result.isProductBlocked) {
+              // Special handling for blocked products - show popup and stay on page
+              console.log('Product blocked by admin');
+              Swal.fire({
+                icon: 'warning',
+                title: 'Product Unavailable',
+                text: result.message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#3085d6'
+              });
+            } else if (result.isStockInsufficient) {
+              // Special handling for stock issues - show popup and stay on page
+              console.log('Stock insufficient');
+              Swal.fire({
+                icon: 'info',
+                title: 'Stock Updated',
+                text: result.message,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#3085d6'
               });
             } else {
               console.log('Other error:', result.message);
@@ -413,7 +437,7 @@
           console.log('Wishlist response result:', result);
 
           // Check if it's a 401 Unauthorized or authentication error
-          if (response.status === 401 || !result.success) {
+          if (response.status === 401 && (result.requiresAuth || result.message === 'Please log in to manage your wishlist')) {
             // Debug logging
             console.log('Wishlist authentication error detected');
             console.log('Status:', response.status);
@@ -462,8 +486,8 @@
             console.log('Message:', result.message);
             console.log('RequiresAuth:', result.requiresAuth);
 
-            // Check if it's an authentication error
-            if (result.message === 'Please log in to manage your wishlist' || result.requiresAuth) {
+            // Handle different types of errors
+            if (result.requiresAuth || result.message === 'Please log in to manage your wishlist') {
               console.log('Authentication required - redirecting to login');
               Swal.fire({
                 toast: true,

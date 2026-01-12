@@ -1,5 +1,5 @@
 const { createValidationMiddleware, validateObjectId, validateQuantity } = require('../../helpers/validation-helper');
-
+const { HttpStatus } = require("../../helpers/status-code");
 
 const validateAddToCart = createValidationMiddleware({
   productId: {
@@ -39,7 +39,7 @@ const validateCartItemOwnership = async (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to manage cart'
       });
@@ -49,7 +49,7 @@ const validateCartItemOwnership = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Cart validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -62,7 +62,7 @@ const validateCartCheckout = (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to proceed with checkout'
       });
@@ -72,7 +72,7 @@ const validateCartCheckout = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Cart checkout validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });

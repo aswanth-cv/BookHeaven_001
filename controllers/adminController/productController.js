@@ -1,12 +1,13 @@
 const Product = require('../../models/productSchema');
 const Category = require('../../models/categorySchema');
+const { HttpStatus } = require("../../helpers/status-code");
 const fs = require('fs');
 
 
 const getProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 5;
     const search = req.query.search || '';
     const categoryFilter = req.query.category || '';
     const sortBy = req.query.sort || 'newest';
@@ -56,7 +57,7 @@ const getProducts = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching products:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Internal Server Error' });
   }
 };
 
@@ -80,18 +81,16 @@ const addProduct = async (req, res) => {
 
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
-      return res.status(500).json({ error: 'Invalid category' });
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Invalid category' });
     }
 
-    console.log('Uploaded Files:', req.files);
 
     let mainImageUrl = '';
     if (req.files && req.files.mainImage && req.files.mainImage.length > 0) {
       const file = req.files.mainImage[0];
-      console.log(`Uploading main image from: ${file.path}`);
       mainImageUrl =  '/uploads/' + file.filename;
     } else {
-      return res.status(500).json({ error: 'Main image is required' });
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Main image is required' });
     }
 
     const subImages = [];
@@ -126,15 +125,15 @@ const addProduct = async (req, res) => {
     });
 
     await product.save();
-    res.status(201).json({ message: 'Product added successfully' });
+    res.status(HttpStatus.CREATED).json({ message: 'Product added successfully' });
   } catch (error) {
     console.error('Error adding product:', error);
     if (error.message.includes('ENOENT')) {
-      res.status(500).json({ error: 'File upload failed: File not found on server' });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'File upload failed: File not found on server' });
     } else if (error.name === 'TimeoutError') {
-      res.status(500).json({ error: 'Upload timed out. Please try again with a smaller file or check your network.' });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Upload timed out. Please try again with a smaller file or check your network.' });
     } else {
-      res.status(500).json({ error: 'Server Error' });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Server Error' });
     }
   }
 };
@@ -144,7 +143,7 @@ const toggleProductStatus = async (req, res) => {
     const { id } = req.params;
     const product = await Product.findById(id);
     if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ error: 'Product not found' });
     }
 
     product.isListed = !product.isListed;
@@ -154,7 +153,7 @@ const toggleProductStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Error toggling product status:', error);
-    res.status(500).json({ error: 'Server Error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Server Error' });
   }
 };
 
@@ -165,13 +164,13 @@ const getEditProduct = async (req, res) => {
     const categories = await Category.find({ isListed: true });
 
     if (!product || product.isDeleted) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ error: 'Product not found' });
     }
 
     res.render('editProduct', { product, categories });
   } catch (error) {
     console.error('Error fetching product for edit:', error);
-    res.status(500).json({ error: 'Server Error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Server Error' });
   }
 };
 
@@ -195,21 +194,16 @@ const updateProduct = async (req, res) => {
       isListed,
     } = req.body;
 
-    console.log('Request body:', req.body);
-    console.log('Uploaded files:', req.files);
+    
 
     const product = await Product.findById(productId);
-    console.log('Product found:', product);
     if (!product || product.isDeleted) {
-      console.log('Product not found or deleted');
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ error: 'Product not found' });
     }
 
     const categoryExists = await Category.findById(category);
-    console.log('Category exists:', categoryExists);
     if (!categoryExists) {
-      console.log('Invalid category');
-      return res.status(500).json({ error: 'Invalid category' });
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Invalid category' });
     }
 
     let mainImageUrl = product.mainImage;
@@ -229,13 +223,10 @@ const updateProduct = async (req, res) => {
     
     if (req.files && req.files.subImages && req.files.subImages.length > 0) {
       for (const file of req.files.subImages) {
-        console.log("lopp 111");
         
         const pathname = '/uploads/' + file.filename
-        console.log(`Processing sub image: ${pathname}, original name: ${file.originalname}`);
 
         if (processedPaths.has(pathname)) {
-          console.log(`Skipping duplicate sub image path: ${file.path}`);
           continue;
         }
 
@@ -270,35 +261,30 @@ const updateProduct = async (req, res) => {
     product.isListed = isListed === 'on';
 
     await product.save();
-    console.log('Product updated:', product._id);
-    res.status(200).json({ message: 'Product updated successfully' });
+    res.status(HttpStatus.OK).json({ message: 'Product updated successfully' });
   } catch (error) {
     console.error('Error updating product:', error);
     if (error.message.includes('ENOENT')) {
-      res.status(500).json({ error: 'File upload failed: File not found on server' });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'File upload failed: File not found on server' });
     } else {
-      res.status(500).json({ error: 'Server Error' });
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Server Error' });
     }
   }
 };
 const softDeleteProduct = async (req, res) => {
-  console.log('Soft delete request received for productId:', req.params.id);
   try {
     const productId = req.params.id;
     const product = await Product.findById(productId);
-    console.log('Product found:', product);
     if (!product) {
-      console.log('Product not found');
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ error: 'Product not found' });
     }
 
     product.isDeleted = true;
     await product.save();
-    console.log('Product soft deleted:', product._id);
-    res.status(200).json({ message: 'Product soft deleted successfully' });
+    res.status(HttpStatus.OK).json({ message: 'Product soft deleted successfully' });
   } catch (error) {
     console.error('Error soft deleting product:', error);
-    res.status(500).json({ error: 'Server Error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Server Error' });
   }
 };
 

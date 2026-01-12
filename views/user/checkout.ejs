@@ -97,8 +97,12 @@
                       <% } %>
                     </div>
                     <%
-                      const itemTotal = item.discountedPrice * item.quantity;
-                      const proportion = appliedCoupon ? (itemTotal / subtotal) : 0;
+                      const qty = item.quantity || 1;
+                      const unitPrice = (item.offerDiscount && item.offerDiscount > 0)
+                        ? (typeof item.discountedPrice === 'number' ? item.discountedPrice : Number(item.discountedPrice) || 0)
+                        : (typeof item.priceAtAddition === 'number' ? item.priceAtAddition : Number(item.priceAtAddition) || 0);
+                      const itemTotal = unitPrice * qty;
+                      const proportion = appliedCoupon && subtotal ? (itemTotal / subtotal) : 0;
                       const couponShare = appliedCoupon ? Math.round((couponDiscount * proportion) * 100) / 100 : 0;
                     %>
                     <div class="d-flex justify-content-between align-items-center mt-2">
@@ -352,39 +356,29 @@
                         <p class="mb-3">Accepted payment methods:</p>
                         <div class="d-flex flex-wrap gap-3 mb-3">
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=visa"
-                              alt="Visa"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo visa">
+                              <span>VISA</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=mastercard"
-                              alt="Mastercard"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo mastercard">
+                              <span>MasterCard</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=rupay"
-                              alt="RuPay"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo rupay">
+                              <span>RuPay</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=upi"
-                              alt="UPI"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo upi">
+                              <span>UPI</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=netbanking"
-                              alt="Netbanking"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo netbanking">
+                              <span>Net Banking</span>
+                            </div>
                           </div>
                         </div>
 
@@ -682,8 +676,12 @@
                                 <% } %>
                               </div>
                               <%
-                                const itemTotal = item.discountedPrice * item.quantity;
-                                const proportion = appliedCoupon ? (itemTotal / subtotal) : 0;
+                                const qty = item.quantity || 1;
+                                const unitPrice = (item.offerDiscount && item.offerDiscount > 0)
+                                  ? (typeof item.discountedPrice === 'number' ? item.discountedPrice : Number(item.discountedPrice) || 0)
+                                  : (typeof item.priceAtAddition === 'number' ? item.priceAtAddition : Number(item.priceAtAddition) || 0);
+                                const itemTotal = unitPrice * qty;
+                                const proportion = appliedCoupon && subtotal ? (itemTotal / subtotal) : 0;
                                 const couponShare = appliedCoupon ? Math.round((couponDiscount * proportion) * 100) / 100 : 0;
                               %>
                               <div class="d-flex justify-content-between align-items-center mt-2">
@@ -692,16 +690,13 @@
                                   <% if (appliedCoupon) { %>
                                     <div>
                                       Coupon (<%= appliedCoupon.code %>):
-                                      <% const itemTotal = item.discountedPrice * item.quantity; %>
-                                      <% const proportion = itemTotal / subtotal; %>
-                                      <% const couponShare = Math.round((couponDiscount * proportion) * 100) / 100; %>
                                       -₹<%= couponShare.toFixed(2) %>
                                       (<%= (proportion * 100).toFixed(2) %>%)
                                     </div>
                                   <% } %>
                                 </div>
                                 <div class="fw-medium">
-                                  Final Price: ₹<%= ((item.discountedPrice * item.quantity) - (couponShare || 0)).toFixed(2) %>
+                                  Final Price: ₹<%= (itemTotal - (couponShare || 0)).toFixed(2) %>
                                 </div>
                               </div>
                             </div>
@@ -770,8 +765,14 @@
           </div>
 
           <div class="summary-item d-flex justify-content-between mb-3">
-            <span class="text-muted">Shipping</span>
-            <span class="fw-medium">₹0</span>
+            <span class="text-muted">Delivery</span>
+            <span class="fw-medium" id="deliveryCharge">
+              <% if (deliveryCharge > 0) { %>
+                ₹<%= deliveryCharge.toFixed(2) %>
+              <% } else { %>
+                <span class="text-success">FREE</span>
+              <% } %>
+            </span>
           </div>
 
           <div class="summary-item d-flex justify-content-between mb-3">
@@ -815,8 +816,20 @@
           <div class="delivery-info mt-4">
             <div class="d-flex align-items-center mb-2">
               <i class="bi bi-truck me-2 text-success"></i>
-              <span>Free Delivery</span>
+              <span>
+                <% if (deliveryCharge > 0) { %>
+                  Delivery Charge: ₹<%= deliveryCharge.toFixed(2) %>
+                <% } else { %>
+                  Free Delivery
+                <% } %>
+              </span>
             </div>
+            <% if (deliveryCharge > 0) { %>
+              <div class="alert alert-info small mb-2">
+                <i class="bi bi-info-circle me-1"></i>
+                Add ₹<%= (freeDeliveryThreshold - subtotal).toFixed(2) %> more to get FREE delivery!
+              </div>
+            <% } %>
             <div class="d-flex align-items-center mb-2">
               <i class="bi bi-calendar-check me-2 text-success"></i>
               <span>Estimated Delivery: 3-5 business days</span>
@@ -1328,6 +1341,53 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* Payment logo styles */
+  .payment-logo {
+    width: 60px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .payment-logo:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  .payment-logo.visa {
+    background: linear-gradient(135deg, #1a1f71, #0066cc);
+  }
+
+  .payment-logo.mastercard {
+    background: linear-gradient(135deg, #eb001b, #f79e1b);
+  }
+
+  .payment-logo.rupay {
+    background: linear-gradient(135deg, #00a651, #0066cc);
+  }
+
+  .payment-logo.upi {
+    background: linear-gradient(135deg, #ff6600, #ff9900);
+  }
+
+  .payment-logo.netbanking {
+    background: linear-gradient(135deg, #4a90e2, #357abd);
+  }
+
+  .payment-logo span {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
 
   @media (max-width: 767.98px) {
@@ -2144,22 +2204,28 @@
         return false;
       }
 
-
-
       try {
-        const response = await fetch('/checkout/create-razorpay-order', {
+        console.log("📡 Sending request to /create-razorpay-order");
+        console.log("📦 Request body:", { addressId: selectedAddress.value });
+        
+        const response = await fetch('/create-razorpay-order', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            addressId: selectedAddress.value
+             addressId: selectedAddress.value 
           })
         });
 
+        console.log("📨 Response status:", response.status);
+        console.log("📨 Response ok:", response.ok);
+
         const data = await response.json();
+        console.log("📨 Response data:", data);
 
         if (!data.success) {
+          console.log("❌ Server returned error:", data.message);
           Toast.fire({
             icon: 'error',
             title: data.message || 'Failed to create order'
@@ -2167,10 +2233,11 @@
           return false;
         }
 
+        console.log("✅ Razorpay order created:", data.order.id);
         razorpayOrderId = data.order.id;
         return data;
       } catch (error) {
-        console.error('Error creating Razorpay order:', error);
+        console.error('❌ Error creating Razorpay order:', error);
         Toast.fire({
           icon: 'error',
           title: 'Failed to create order'
@@ -2181,37 +2248,53 @@
 
     // Function to open Razorpay payment form
     function openRazorpayCheckout(orderData) {
-      const options = {
-        key: orderData.key,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: orderData.name,
-        description: `Order #${orderData.orderNumber} - Total: ₹${(orderData.amount / 100).toFixed(2)}`,
-        order_id: orderData.order.id,
-        prefill: orderData.prefill,
-        theme: {
-          color: '#198754'
-        },
-        modal: {
-          ondismiss: function() {
-            console.log('Payment modal closed');
-          }
-        },
-        handler: function(response) {
-          verifyPayment(response);
-        }
-      };
+  const options = {
+    key: orderData.key,
+    amount: orderData.amount,
+    currency: orderData.currency,
+    name: orderData.name,
+    description: `Order #${orderData.orderNumber} - Total: ₹${(orderData.amount / 100).toFixed(2)}`,
+    order_id: orderData.order.id,
+    prefill: orderData.prefill,
 
-      // Log for debugging
-      console.log('Razorpay Payment:', {
-        amount: orderData.amount,
-        amountInRupees: (orderData.amount / 100).toFixed(2),
-        breakdown: orderData.priceBreakdown
-      });
+    theme: {
+      color: "#198754"
+    },
 
-      const rzp = new Razorpay(options);
-      rzp.open();
+    
+    handler: function (response) {
+      verifyPayment(response);
+    },
+
+    // USER CLOSES POPUP (treated as failure)
+    modal: {
+      ondismiss: function () {
+        window.location.href =
+          "/payment-failure?error=Payment cancelled by user";
+      }
     }
+  };
+
+  try {
+    const rzp = new Razorpay(options);
+
+    // PAYMENT FAILED EVENT
+    rzp.on("payment.failed", function (response) {
+      const errorMsg =
+        response.error?.description || "Payment failed";
+
+      window.location.href =
+        `/payment-failure?error=${encodeURIComponent(errorMsg)}`;
+    });
+
+    rzp.open();
+  } catch (error) {
+    console.error("Error opening Razorpay:", error);
+    window.location.href =
+      "/payment-failure?error=Unable to open payment gateway";
+  }
+}
+
 
     // Function to verify payment
     async function verifyPayment(response) {
@@ -2261,6 +2344,17 @@
       }
     }
 
+    // Check if Razorpay is loaded
+    if (typeof Razorpay === 'undefined') {
+      console.error('❌ Razorpay script not loaded');
+      Toast.fire({
+        icon: 'error',
+        title: 'Payment gateway not available. Please refresh the page.'
+      });
+    } else {
+      console.log('✅ Razorpay script loaded successfully');
+    }
+
     // Place order button
     const placeOrderBtn = document.getElementById("placeOrderBtn");
     if (placeOrderBtn) {
@@ -2288,7 +2382,7 @@
         if (paymentMethod === "codPayment") {
           // Check COD eligibility first
           const totalAmount = parseFloat(document.getElementById("totalAmount").textContent.replace('₹', '').replace(',', ''));
-          if (totalAmount > 1000) {
+          if (totalAmount > 5000) {
             Toast.fire({
               icon: "error",
               title: "Cash on Delivery is not available for orders above ₹1,000",
@@ -2349,12 +2443,17 @@
         try {
           if (paymentMethodValue === "Razorpay") {
             // Handle Razorpay payment
+            console.log("🚀 Creating Razorpay order...");
             const orderData = await createRazorpayOrder();
+            console.log("✅ Order data received in frontend:", orderData);
+
             if (orderData) {
               this.disabled = false;
               this.innerHTML = '<i class="bi bi-bag-check me-2"></i>Place Order';
+              console.log("🎯 Opening Razorpay checkout...");
               openRazorpayCheckout(orderData);
             } else {
+              console.log("❌ Failed to create Razorpay order");
               this.disabled = false;
               this.innerHTML = '<i class="bi bi-bag-check me-2"></i>Place Order';
             }
@@ -2377,7 +2476,7 @@
               // Show success toast and redirect directly to success page
               Toast.fire({
                 icon: "success",
-                title: `Order #${data.orderNumber} placed successfully!`,
+                title: `Order #${data.orderId} placed successfully!`,
                 timer: 2000
               });
 

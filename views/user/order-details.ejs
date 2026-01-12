@@ -398,13 +398,21 @@
           <h5 class="fw-bold mb-3">Items in Your Order</h5>
 
           <% order.items.forEach(item => { %>
-            <div class="d-flex mb-4 order-item">
+            <div class="d-flex mb-4 order-item" data-product-id="<%= item.product._id || item.product %>">
               <div class="order-item-image me-3">
                 <img
-                  src="<%= item.image || 'https://via.placeholder.com/120x160' %>"
-                  alt="<%= item.title || 'Product' %>"
+                  src="<% 
+                    const rawImg = item.image || (item.product && (item.product.mainImage || (item.product.subImages && item.product.subImages[0])));
+                    const isAbsolute = rawImg && (rawImg.startsWith('http://') || rawImg.startsWith('https://') || rawImg.startsWith('/'));
+                    const resolvedImg = rawImg ? (isAbsolute ? rawImg : ('/' + rawImg.replace(/^\/+/, ''))) : 'https://via.placeholder.com/120x160';
+                  %><%= resolvedImg %>"
+                  alt="<%= item.title || (item.product && item.product.title) || 'Product' %>"
                   class="img-fluid rounded"
-                  onerror="this.src='https://via.placeholder.com/120x160'"
+                  width="120"
+                  height="160"
+                  loading="lazy"
+                  decoding="async"
+                  onerror="this.onerror=null; this.src='https://via.placeholder.com/120x160'"
                 >
               </div>
               <div class="flex-grow-1">
@@ -425,12 +433,17 @@
                     <% if (item.discountedPrice && item.discountedPrice < item.originalPrice) { %>
                       <p class="mb-0">
                         <span class="text-decoration-line-through text-muted me-2">
-                          <%= item.formattedPrice %>
+                          ₹<%= item.originalPrice.toFixed(2) %> each
                         </span>
                         <span class="fw-medium">
-                          <%= item.formattedDiscountedPrice %>
+                          ₹<%= item.discountedPrice.toFixed(2) %> each
                         </span>
                       </p>
+                      <% if (item.quantity > 1) { %>
+                        <small class="text-muted d-block">
+                          Total: ₹<%= (item.discountedPrice * item.quantity).toFixed(2) %>
+                        </small>
+                      <% } %>
                       <% if (item.offerDiscount > 0) { %>
                         <small class="text-success d-block">
                           Save <%= item.discountPercentage %>% with offer
@@ -441,13 +454,25 @@
                           Extra <%= (item.couponProportion * 100).toFixed(1) %>% of total coupon applied
                         </small>
                       <% } %>
-                      <% if (item.finalPrice !== item.discountedPrice) { %>
+                      <% if (Math.abs(item.finalPrice - item.discountedPrice) > 0.01) { %>
                         <p class="mb-0 mt-1 fw-medium text-success">
-                          Final price: <%= item.formattedFinalPrice %>
+                          Final price: ₹<%= item.finalPrice.toFixed(2) %> each
+                          <% if (item.quantity > 1) { %>
+                            <small class="d-block text-muted">
+                              Total: ₹<%= (item.finalPrice * item.quantity).toFixed(2) %>
+                            </small>
+                          <% } %>
                         </p>
                       <% } %>
                     <% } else { %>
-                      <p class="fw-medium mb-0"><%= item.formattedPrice %></p>
+                      <p class="fw-medium mb-0">
+                        ₹<%= item.originalPrice.toFixed(2) %> each
+                        <% if (item.quantity > 1) { %>
+                          <small class="d-block text-muted">
+                            Total: ₹<%= (item.originalPrice * item.quantity).toFixed(2) %>
+                          </small>
+                        <% } %>
+                      </p>
                     <% } %>
                   </div>
                 </div>
@@ -568,19 +593,8 @@
                           }
                         }
 
-                        // ACCURATE REFUND CALCULATION - Using Money Calculator Logic
-                        let actualPaidAmount = 0;
-
-                        if (order.items.length === 1) {
-                          // Single item order - refund full order total (what customer paid)
-                          actualPaidAmount = order.total;
-                        } else {
-                          // Multi-item order - calculate proportional amount
-                          const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                          const orderSubtotal = order.total - (order.tax || 0);
-                          const itemProportion = itemFinalPrice / orderSubtotal;
-                          actualPaidAmount = order.total * itemProportion;
-                        }
+                        // Use pre-calculated refund amount from controller
+                        const actualPaidAmount = item.expectedRefundAmount || 0;
                       %>
 
                       <div class="refund-info-card">
@@ -626,18 +640,7 @@
                         }
 
                         // ACCURATE REFUND CALCULATION - Using Money Calculator Logic
-                        let actualPaidAmount = 0;
-
-                        if (order.items.length === 1) {
-                          // Single item order - refund full order total (what customer paid)
-                          actualPaidAmount = order.total;
-                        } else {
-                          // Multi-item order - calculate proportional amount
-                          const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                          const orderSubtotal = order.total - (order.tax || 0);
-                          const itemProportion = itemFinalPrice / orderSubtotal;
-                          actualPaidAmount = order.total * itemProportion;
-                        }
+                        const actualPaidAmount = item.expectedRefundAmount || 0;
                       %>
 
                       <% if (showRefund) { %>
@@ -687,19 +690,8 @@
                         </div>
                         <div class="expected-refund-details mt-1">
                           <%
-                            // ACCURATE REFUND CALCULATION - Using Money Calculator Logic
-                            let actualPaidAmount = 0;
-
-                            if (order.items.length === 1) {
-                              // Single item order - refund full order total (what customer paid)
-                              actualPaidAmount = order.total;
-                            } else {
-                              // Multi-item order - calculate proportional amount
-                              const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                              const orderSubtotal = order.total - (order.tax || 0);
-                              const itemProportion = itemFinalPrice / orderSubtotal;
-                              actualPaidAmount = order.total * itemProportion;
-                            }
+                            // Use pre-calculated refund amount from controller
+                            const actualPaidAmount = item.expectedRefundAmount || 0;
                           %>
                           <div class="refund-breakdown">
                             <small class="text-muted">Will be refunded to wallet:</small>
@@ -735,7 +727,11 @@
                       <p>Are you sure you want to cancel this item?</p>
                       <p><strong><%= item.title %></strong></p>
                       <p>Quantity: <%= item.quantity %></p>
-                      <p>Price: <%= item.formattedFinalPrice %></p>
+                      <p>Price: ₹<%= item.finalPrice.toFixed(2) %> each
+                        <% if (item.quantity > 1) { %>
+                          (Total: ₹<%= (item.finalPrice * item.quantity).toFixed(2) %>)
+                        <% } %>
+                      </p>
 
                       <!-- **CORRECTED REFUND INFORMATION IN MODAL** -->
                       <div class="alert alert-info mt-3">
@@ -743,19 +739,8 @@
                           <i class="bi bi-info-circle me-2"></i>Refund Information
                         </h6>
                         <%
-                          // ACCURATE REFUND CALCULATION - Using Money Calculator Logic
-                          let actualPaidAmount = 0;
-
-                          if (order.items.length === 1) {
-                            // Single item order - refund full order total (what customer paid)
-                            actualPaidAmount = order.total;
-                          } else {
-                            // Multi-item order - calculate proportional amount
-                            const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                            const orderSubtotal = order.total - (order.tax || 0);
-                            const itemProportion = itemFinalPrice / orderSubtotal;
-                            actualPaidAmount = order.total * itemProportion;
-                          }
+                          // Use pre-calculated refund amount from controller
+                          const actualPaidAmount = item.expectedRefundAmount || 0;
                         %>
                         <% if (order.paymentMethod === 'COD' && order.orderStatus !== 'Delivered' && !order.deliveredAt) { %>
                           <p class="mb-2">This COD order will be cancelled. <strong>No refund is required</strong> as no payment has been collected yet.</p>
@@ -810,7 +795,11 @@
                       <p>Are you sure you want to return this item?</p>
                       <p><strong><%= item.title %></strong></p>
                       <p>Quantity: <%= item.quantity %></p>
-                      <p>Price: <%= item.formattedFinalPrice %></p>
+                      <p>Price: ₹<%= item.finalPrice.toFixed(2) %> each
+                        <% if (item.quantity > 1) { %>
+                          (Total: ₹<%= (item.finalPrice * item.quantity).toFixed(2) %>)
+                        <% } %>
+                      </p>
 
                       <!-- **CORRECTED REFUND INFORMATION IN RETURN MODAL** -->
                       <div class="alert alert-warning mt-3">
@@ -818,19 +807,8 @@
                           <i class="bi bi-exclamation-triangle me-2"></i>Return & Refund Information
                         </h6>
                         <%
-                          // ACCURATE REFUND CALCULATION - Using Money Calculator Logic
-                          let actualPaidAmount = 0;
-
-                          if (order.items.length === 1) {
-                            // Single item order - refund full order total (what customer paid)
-                            actualPaidAmount = order.total;
-                          } else {
-                            // Multi-item order - calculate proportional amount
-                            const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                            const orderSubtotal = order.total - (order.tax || 0);
-                            const itemProportion = itemFinalPrice / orderSubtotal;
-                            actualPaidAmount = order.total * itemProportion;
-                          }
+                          // Use pre-calculated refund amount from controller
+                          const actualPaidAmount = item.expectedRefundAmount || 0;
                         %>
                         <p class="mb-2">If your return is approved, <strong>₹<%= actualPaidAmount.toFixed(2) %></strong> will be refunded to your wallet.</p>
                         <small class="text-muted">
@@ -920,23 +898,32 @@
 
             <dl class="row price-summary">
               <dt class="col-7">Items (<%= order.items.length %>):</dt>
-              <dd class="col-5"><%= order.formattedSubtotal %></dd>
+              <dd class="col-5" data-summary="subtotal"><%= order.formattedSubtotal %></dd>
 
               <% if (order.discount && order.discount > 0) { %>
               <dt class="col-7">Offer Discount:</dt>
-              <dd class="col-5 text-success">-<%= order.formattedDiscount %></dd>
+              <dd class="col-5 text-success" data-summary="discount">-<%= order.formattedDiscount %></dd>
               <% } %>
 
               <% if (order.couponDiscount && order.couponDiscount > 0) { %>
               <dt class="col-7">Coupon Discount<%= order.couponCode ? ` (${order.couponCode})` : '' %>:</dt>
-              <dd class="col-5 text-success">-<%= order.formattedCouponDiscount %></dd>
+              <dd class="col-5 text-success" data-summary="coupon-discount">-<%= order.formattedCouponDiscount %></dd>
               <% } %>
 
               <dt class="col-7">Tax:</dt>
-              <dd class="col-5"><%= order.formattedTax %></dd>
+              <dd class="col-5" data-summary="tax"><%= order.formattedTax %></dd>
+
+              <dt class="col-7">Delivery Charges:</dt>
+              <dd class="col-5" data-summary="shipping">
+                <% if (order.shipping && order.shipping > 0) { %>
+                  ₹<%= order.shipping.toFixed(2) %>
+                <% } else { %>
+                  <span class="text-success">FREE</span>
+                <% } %>
+              </dd>
 
               <dt class="col-7 total-row">Order Total:</dt>
-              <dd class="col-5 total-row"><%= order.formattedTotal %></dd>
+              <dd class="col-5 total-row" data-summary="total"><%= order.formattedTotal %></dd>
             </dl>
 
             <hr class="my-3">
@@ -1001,8 +988,11 @@
             </div>
 
             <div>
-              <a href="/orders/<%= order._id %>/invoice" class="btn btn-outline-primary btn-sm mb-2 w-100">View Invoice</a>
-              <a href="/orders/<%= order._id %>/invoice/download" class="btn btn-outline-dark btn-sm mb-2 w-100" onclick="downloadInvoice(event, '<%= order._id %>', '<%= order.orderNumber %>')">Download Invoice</a>
+              <% const hideInvoice = ['Returned', 'Return Requested', 'Partially Returned', 'Partially Return Requested'].includes(order.orderStatus); %>
+              <% if (!hideInvoice) { %>
+                <a href="/orders/<%= order._id %>/invoice" class="btn btn-outline-primary btn-sm mb-2 w-100">View Invoice</a>
+                <a href="/orders/<%= order._id %>/invoice/download" class="btn btn-outline-dark btn-sm mb-2 w-100" onclick="downloadInvoice(event, '<%= order._id %>', '<%= order.orderNumber %>')">Download Invoice</a>
+              <% } %>
               <%
                 const orderNotTooFarProgressed = ['Placed', 'Processing', 'Partially Cancelled', 'Partially Returned', 'Partially Return Requested'].includes(order.orderStatus);
                 const hasActiveItems = order.items.some(item => item.status === 'Active');
@@ -1012,34 +1002,21 @@
                 // **CALCULATE REMAINING ORDER AMOUNT (excluding cancelled items)**
                 let remainingOrderAmount = 0;
                 if (hasActiveItems) {
-                  // Calculate amount for active items only
+                  // Calculate amount for active items only - sum their individual refund amounts
                   const activeItems = order.items.filter(item => item.status === 'Active');
 
-                  if (activeItems.length === order.items.length) {
-                    // No items cancelled yet - use full order total
+                  // Always use the sum of individual expectedRefundAmount for consistency
+                  // This matches exactly what the backend will actually credit
+                  activeItems.forEach(item => {
+                    remainingOrderAmount += item.expectedRefundAmount || 0;
+                  });
+                  
+                  // Note: We don't use order.total here because the backend calculates
+                  // refunds as sum of individual item amounts (without proportional tax/shipping)
+                  // unless it's a single-item order
+                  if (activeItems.length === 1 && order.items.length === 1) {
+                    // Special case: single item order gets full order total refund
                     remainingOrderAmount = order.total;
-                  } else {
-                    // Some items cancelled - calculate proportional amount for remaining items
-                    let activeItemsSubtotal = 0;
-                    activeItems.forEach(item => {
-                      const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                      activeItemsSubtotal += itemFinalPrice;
-                    });
-
-                    // Calculate total items subtotal for proportion
-                    let totalItemsSubtotal = 0;
-                    order.items.forEach(item => {
-                      const itemFinalPrice = item.priceBreakdown?.finalPrice || (item.discountedPrice * item.quantity);
-                      totalItemsSubtotal += itemFinalPrice;
-                    });
-
-                    // Calculate proportional amount including tax
-                    if (totalItemsSubtotal > 0) {
-                      const proportion = activeItemsSubtotal / totalItemsSubtotal;
-                      remainingOrderAmount = order.total * proportion;
-                    } else {
-                      remainingOrderAmount = 0;
-                    }
                   }
                 }
               %>
@@ -1207,7 +1184,166 @@
 <% } %>
 
 <script>
-  // Toast notification function
+  // Function to update order summary after cancellation
+  function updateOrderSummary(orderId) {
+    // Fetch updated order data
+    fetch(`/orders/${orderId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.order) {
+        // Update order status badge
+        updateOrderStatusBadge(data.order.orderStatus);
+        
+        // Update order summary section
+        updateOrderSummarySection(data.order);
+        
+        // Update individual item statuses
+        updateItemStatuses(data.order.items);
+        
+        // Update timeline if needed
+        if (data.timeline) {
+          updateOrderTimeline(data.timeline);
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error fetching updated order data:', error);
+    });
+  }
+
+  // Update order status badge
+  function updateOrderStatusBadge(orderStatus) {
+    const statusBadgeContainer = document.querySelector('.order-header .badge');
+    if (statusBadgeContainer) {
+      let badgeClass = 'badge ';
+      let statusText = orderStatus;
+      
+      switch(orderStatus) {
+        case 'Delivered':
+          badgeClass += 'bg-success';
+          break;
+        case 'Shipped':
+          badgeClass += 'bg-primary';
+          break;
+        case 'Processing':
+          badgeClass += 'bg-warning text-dark';
+          break;
+        case 'Cancelled':
+        case 'Partially Cancelled':
+          badgeClass += 'bg-secondary';
+          break;
+        case 'Placed':
+          badgeClass += 'bg-info';
+          break;
+        case 'Returned':
+        case 'Partially Returned':
+          badgeClass += 'bg-danger';
+          break;
+        default:
+          badgeClass += 'bg-secondary';
+      }
+      
+      statusBadgeContainer.className = badgeClass;
+      statusBadgeContainer.textContent = statusText;
+    }
+  }
+
+  // Update order summary section (totals, etc.)
+  function updateOrderSummarySection(order) {
+    // Update subtotal
+    const subtotalElement = document.querySelector('[data-summary="subtotal"]');
+    if (subtotalElement && order.formattedSubtotal) {
+      subtotalElement.textContent = order.formattedSubtotal;
+    }
+    
+    // Update total
+    const totalElement = document.querySelector('[data-summary="total"]');
+    if (totalElement && order.formattedTotal) {
+      totalElement.textContent = order.formattedTotal;
+    }
+    
+    // Update discount if exists
+    const discountElement = document.querySelector('[data-summary="discount"]');
+    if (discountElement && order.formattedDiscount) {
+      discountElement.textContent = order.formattedDiscount;
+    }
+    
+    // Update tax if exists
+    const taxElement = document.querySelector('[data-summary="tax"]');
+    if (taxElement && order.formattedTax) {
+      taxElement.textContent = order.formattedTax;
+    }
+  }
+
+  // Update individual item statuses
+  function updateItemStatuses(items) {
+    items.forEach(item => {
+      const productId = item.product._id || item.product;
+      const itemContainer = document.querySelector(`[data-product-id="${productId}"]`);
+      
+      if (itemContainer) {
+        // Update item status badge
+        const statusBadge = itemContainer.querySelector('.item-status');
+        if (statusBadge) {
+          statusBadge.className = `item-status ${item.status.toLowerCase().replace(' ', '-')}`;
+          statusBadge.textContent = item.status;
+        }
+        
+        // Update action buttons
+        const actionButtons = itemContainer.querySelector('.d-flex.flex-wrap.gap-2');
+        if (actionButtons && item.status === 'Cancelled') {
+          // Hide action buttons for cancelled items
+          actionButtons.style.display = 'none';
+          
+          // Show cancellation info if not already present
+          const cancelInfo = itemContainer.querySelector('.cancelled-item-info');
+          if (!cancelInfo) {
+            const cancelInfoHtml = `
+              <div class="cancelled-item-info">
+                <span class="badge bg-danger mb-2">Cancelled</span>
+                <div class="text-muted small mb-2">Reason: ${item.cancellationReason || 'Not specified'}</div>
+                <div class="refund-info-card">
+                  <div class="refund-status">
+                    <i class="bi bi-check-circle text-success me-1"></i>
+                    <span class="text-success fw-medium">Refund Processed</span>
+                  </div>
+                </div>
+              </div>
+            `;
+            actionButtons.insertAdjacentHTML('afterend', cancelInfoHtml);
+          }
+        }
+      }
+    });
+  }
+
+  // Update order timeline
+  function updateOrderTimeline(timeline) {
+    const timelineContainer = document.querySelector('.order-timeline');
+    if (timelineContainer && timeline) {
+      let timelineHtml = '';
+      timeline.forEach(item => {
+        const statusClass = item.completed ? 'completed' : 
+                           item.active ? 'active' : 
+                           item.cancelled ? 'cancelled' : 
+                           item.returned ? 'returned' : 
+                           item.return_requested ? 'return-requested' : 'pending';
+        
+        timelineHtml += `
+          <div class="timeline-item ${statusClass}">
+            <p class="fw-medium mb-0">${item.status}</p>
+            <p class="text-muted small mb-0">${item.timestamp}</p>
+          </div>
+        `;
+      });
+      timelineContainer.innerHTML = timelineHtml;
+    }
+  }
   function showToast(message, type = 'info') {
     const toastContainer = document.querySelector('.toast-container');
 
@@ -1297,34 +1433,29 @@
       });
     }
 
-    // For item cancellations
+    // For item cancellations and returns
     <% order.items.forEach(item => { %>
-      const cancelItemReason<%= item.product._id || item.product %> = document.getElementById('cancelItemReason<%= item.product._id || item.product %>');
-      const otherReasonDiv<%= item.product._id || item.product %> = document.getElementById('otherReasonDiv<%= item.product._id || item.product %>');
+      (function() {
+        const pid = '<%= item.product._id || item.product %>';
 
-      if (cancelItemReason<%= item.product._id || item.product %>) {
-        cancelItemReason<%= item.product._id || item.product %>.addEventListener('change', function() {
-          if (this.value === 'Other') {
-            otherReasonDiv<%= item.product._id || item.product %>.style.display = 'block';
-          } else {
-            otherReasonDiv<%= item.product._id || item.product %>.style.display = 'none';
-          }
-        });
-      }
+        // Cancel item reason toggle
+        const cancelEl = document.getElementById(`cancelItemReason${pid}`);
+        const otherCancelDiv = document.getElementById(`otherReasonDiv${pid}`);
+        if (cancelEl && otherCancelDiv) {
+          cancelEl.addEventListener('change', function() {
+            otherCancelDiv.style.display = this.value === 'Other' ? 'block' : 'none';
+          });
+        }
 
-      // For item returns
-      const returnItemReason<%= item.product._id || item.product %> = document.getElementById('returnItemReason<%= item.product._id || item.product %>');
-      const otherReturnReasonDiv<%= item.product._id || item.product %> = document.getElementById('otherReturnReasonDiv<%= item.product._id || item.product %>');
-
-      if (returnItemReason<%= item.product._id || item.product %>) {
-        returnItemReason<%= item.product._id || item.product %>.addEventListener('change', function() {
-          if (this.value === 'Other') {
-            otherReturnReasonDiv<%= item.product._id || item.product %>.style.display = 'block';
-          } else {
-            otherReturnReasonDiv<%= item.product._id || item.product %>.style.display = 'none';
-          }
-        });
-      }
+        // Return item reason toggle
+        const returnEl = document.getElementById(`returnItemReason${pid}`);
+        const otherReturnDiv = document.getElementById(`otherReturnReasonDiv${pid}`);
+        if (returnEl && otherReturnDiv) {
+          returnEl.addEventListener('change', function() {
+            otherReturnDiv.style.display = this.value === 'Other' ? 'block' : 'none';
+          });
+        }
+      })();
     <% }); %>
   });
 
@@ -1371,7 +1502,10 @@
 
         showToast(data.message, 'success');
 
-        // Auto refresh disabled to prevent unexpected page reloads.
+        // Update order summary dynamically instead of page refresh
+        setTimeout(() => {
+          updateOrderSummary(orderId);
+        }, 1000);
       } else {
         showToast(data.message, 'error');
       }
@@ -1425,9 +1559,24 @@
 
         showToast(data.message, 'success');
 
-        // Auto refresh disabled to prevent unexpected page reloads.
+        // Update order summary dynamically instead of page refresh
+        setTimeout(() => {
+          updateOrderSummary(orderId);
+        }, 1000);
       } else {
-        showToast(data.message, 'error');
+        // Check if this is a coupon validation error requiring full cancellation
+        if (data.requiresFullCancellation) {
+          // Hide the current modal
+          const modal = bootstrap.Modal.getInstance(document.getElementById(`cancelItemModal${productId}`));
+          if (modal) {
+            modal.hide();
+          }
+
+          // Show coupon validation error with option to cancel entire order
+          showCouponValidationError(data, orderId, 'cancel');
+        } else {
+          showToast(data.message, 'error');
+        }
       }
     })
     .catch(error => {
@@ -1559,7 +1708,19 @@
 
         // Auto refresh disabled to prevent unexpected page reloads.
       } else {
-        showToast(data.message, 'error');
+        // Check if this is a coupon validation error requiring full return
+        if (data.requiresFullReturn) {
+          // Hide the current modal
+          const modal = bootstrap.Modal.getInstance(document.getElementById(`returnItemModal${productId}`));
+          if (modal) {
+            modal.hide();
+          }
+
+          // Show coupon validation error with option to return entire order
+          showCouponValidationError(data, orderId, 'return');
+        } else {
+          showToast(data.message, 'error');
+        }
       }
     })
     .catch(error => {
@@ -1597,6 +1758,103 @@
       showToast('An error occurred while processing your request', 'error');
     });
     return false; // Prevent default link behavior
+  }
+
+  // Function to show coupon validation error modal
+  function showCouponValidationError(data, orderId, actionType) {
+    const modalId = 'couponValidationModal';
+    
+    // Remove existing modal if present
+    const existingModal = document.getElementById(modalId);
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Create modal HTML
+    const modalHTML = `
+      <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="couponValidationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+              <h5 class="modal-title" id="couponValidationModalLabel">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Coupon Condition Not Met
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="alert alert-warning mb-3">
+                <strong>Important:</strong> This action would break your coupon conditions.
+              </div>
+              <p class="mb-3">${data.message}</p>
+              <div class="bg-light p-3 rounded mb-3">
+                <h6 class="mb-2"><i class="fas fa-tag me-2"></i>Coupon Details:</h6>
+                <ul class="mb-0">
+                  <li><strong>Code:</strong> ${data.couponCode}</li>
+                  <li><strong>Minimum Order:</strong> ₹${data.minOrderAmount}</li>
+                  ${data.currentTotal ? `<li><strong>Remaining Total:</strong> ₹${data.currentTotal.toFixed(2)}</li>` : ''}
+                </ul>
+              </div>
+              <p class="text-muted mb-0">
+                <i class="fas fa-info-circle me-2"></i>
+                To proceed, you'll need to ${actionType} the entire order instead of individual items.
+              </p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-2"></i>Keep Order As Is
+              </button>
+              <button type="button" class="btn btn-danger" onclick="proceedWithFull${actionType.charAt(0).toUpperCase() + actionType.slice(1)}('${orderId}')">
+                <i class="fas fa-${actionType === 'cancel' ? 'ban' : 'undo'} me-2"></i>
+                ${actionType.charAt(0).toUpperCase() + actionType.slice(1)} Entire Order
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add modal to DOM
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+
+    // Clean up modal when hidden
+    document.getElementById(modalId).addEventListener('hidden.bs.modal', function () {
+      this.remove();
+    });
+  }
+
+  // Function to proceed with full order cancellation
+  function proceedWithFullCancel(orderId) {
+    // Hide the coupon validation modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('couponValidationModal'));
+    if (modal) {
+      modal.hide();
+    }
+
+    // Show the full order cancellation modal
+    setTimeout(() => {
+      const cancelOrderModal = new bootstrap.Modal(document.getElementById('cancelOrderModal'));
+      cancelOrderModal.show();
+    }, 300);
+  }
+
+  // Function to proceed with full order return
+  function proceedWithFullReturn(orderId) {
+    // Hide the coupon validation modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('couponValidationModal'));
+    if (modal) {
+      modal.hide();
+    }
+
+    // Show the full order return modal
+    setTimeout(() => {
+      const returnOrderModal = new bootstrap.Modal(document.getElementById('returnOrderModal'));
+      returnOrderModal.show();
+    }, 300);
   }
 </script>
 

@@ -1,6 +1,7 @@
 const { json } = require("express");
 const Address = require("../../models/addressSchema");
 const User = require("../../models/userSchema");
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 
@@ -16,13 +17,14 @@ const getAddress = async(req,res)=>{
     res.render("address", { user, addresses, returnTo });
     } catch (error) {
         console.error("Error in address rendering",error);
-        res.status(500).render("Error",{message:"Internal server error"}); 
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).render("Error",{message:"Internal server error"}); 
     }
 }
 
 const addresses = async(req,res)=>{
     try {
         const userId = req.session.user_id;
+        const data = req.validatedData || req.body;
         const {
             fullName,
             phone,
@@ -33,49 +35,52 @@ const addresses = async(req,res)=>{
             landmark,
             isDefault,
             returnTo
-        } = req.body;
-        if(!fullName || !phone || !pincode || !district || !state || !street){
-            return res.status(400).json({
-                success:false,
-                message:"All required fields must be filled"
-            })
+        } = data;
+
+        const makeDefault = isDefault === true || isDefault === 'true' || isDefault === 'on';
+
+        if (makeDefault) {
+          await Address.updateMany({ userId }, { isDefault: false });
         }
-        if (isDefault) {
-      await Address.updateMany({ userId }, { isDefault: false });
-    }
 
-    const newAddress = new Address({
-      userId,
-      fullName,
-      phone,
-      pincode,
-      district,
-      state,
-      street,
-      landmark,
-      isDefault: isDefault || false,
-    });
-    await newAddress.save();
-    if (returnTo === "checkout") {
-      return res.status(201).json({
-        success: true,
-        message: "Address added successfully",
-        address: newAddress,
-        redirect: "/checkout",
-      });
-    }
+        const newAddress = new Address({
+          userId,
+          fullName,
+          phone,
+          pincode,
+          district,
+          state,
+          street,
+          landmark,
+          isDefault: makeDefault,
+        });
+        await newAddress.save();
+        
+        const shouldRedirectToCheckout = returnTo === "checkout" || req.session.redirectToCheckout;
+        
+        if (shouldRedirectToCheckout) {
+          // Clear the session flag
+          delete req.session.redirectToCheckout;
+          
+          return res.status(HttpStatus.CREATED).json({
+            success: true,
+            message: "Address added successfully",
+            address: newAddress,
+            redirect: "/checkout",
+          });
+        }
 
-    res.status(201).json({
-      success: true,
-      message: "Address added successfully",
-      address: newAddress,
-    });
+        res.status(HttpStatus.CREATED).json({
+          success: true,
+          message: "Address added successfully",
+          address: newAddress,
+        });
 
 
 
     } catch (error) {
         console.error("Error in adding address",error);
-        res.status(500).json({
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
             success:false,
             message:"Faild to add address"
         })
@@ -100,7 +105,7 @@ const updateAddress = async(req,res)=>{
 
 
         if(!fullName || !phone || !pincode || !district || !state || !street){
-            return res.status(400).json({
+            return res.status(HttpStatus.BAD_REQUEST).json({
                 success:false,
                 message:"All required field must be filled"
             })
@@ -108,7 +113,7 @@ const updateAddress = async(req,res)=>{
 
         const address = await Address.findById(addressId);
         if(!address){
-           return  res.status(404).json({
+           return  res.status(HttpStatus.NOT_FOUND).json({
                 success:false,
                 message:"Address not found"
             })
@@ -116,7 +121,7 @@ const updateAddress = async(req,res)=>{
 
         if (address.userId.toString() !== userId) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({ success: false, message: "Unauthorized access" });
     }
     
@@ -145,7 +150,7 @@ const updateAddress = async(req,res)=>{
     } catch (error) {
         console.log("Error updating address",error)
 
-        return res.status(500).json({
+        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
             success:false,
             message:"Faild to add address"
         })
@@ -160,7 +165,7 @@ const deleteAddress = async(req,res)=>{
 
         const address = await Address.findById(addressId);
         if(!address){
-            return res.status(404).json({
+            return res.status(HttpStatus.NOT_FOUND).json({
                 success:false,
                 message:"Address not found"
             });
@@ -168,7 +173,7 @@ const deleteAddress = async(req,res)=>{
 
         if (address.userId.toString() !== userId) {
       return res
-        .status(401).json({ success: false, message: "Unauthorized access" });
+        .status(HttpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized access" });
     }
 
     await Address.findByIdAndDelete(addressId);
@@ -177,7 +182,7 @@ const deleteAddress = async(req,res)=>{
 
     } catch (error) {
         console.log("Error delete address",error);
-        res.status(500).json({
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
             success:false,
             message:"Faild to delete address"
         })
@@ -192,18 +197,18 @@ const setDefaultAddress = async(req,res)=>{
         const address = await Address.findById(addressId);
 
         if(!address){
-            return res.status(404).json({
+            return res.status(HttpStatus.NOT_FOUND).json({
                 success:false,
                 message:"Address not found"
             })
         }
 
         if (address.userId.toString() !== userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized access" });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: "Unauthorized access" });
     }
 
     await Address.updateMany({userId} , {isDefault:false})
-    Address.isDefault = true;
+    address.isDefault = true;
     await address.save();
 
    return res.json({
@@ -215,7 +220,7 @@ const setDefaultAddress = async(req,res)=>{
 
     } catch (error) {
        console.log("Error setting default address:", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Failed to set default address" }); 
     }
@@ -228,13 +233,13 @@ const getAddressById = async (req, res) => {
 
     const address = await Address.findById(addressId);
     if (!address) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
          success: false,
           message: "Address not found" });
     }
     if (address.userId.toString() !== userId) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({ success: false, message: "Unauthorized access" });
     }
 
@@ -242,7 +247,7 @@ const getAddressById = async (req, res) => {
   } catch (error) {
     console.log("Error fetching address:", error);
     res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Failed to fetch address" });
   }
 };

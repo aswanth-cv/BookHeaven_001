@@ -36,7 +36,7 @@
             </div>
             <div class="d-flex justify-content-between mb-2">
               <span>Subtotal:</span>
-              <span class="fw-medium">₹<%= subtotal.toFixed(2) %></span>
+              <span class="fw-medium">₹<%= originalSubtotal.toFixed(2) %></span>
             </div>
             <% if (offerDiscount && offerDiscount > 0) { %>
               <div class="d-flex justify-content-between mb-2">
@@ -56,6 +56,16 @@
                 <span class="fw-medium">₹<%= tax.toFixed(2) %></span>
               </div>
             <% } %>
+            <div class="d-flex justify-content-between mb-2">
+              <span>Delivery Charges:</span>
+              <span class="fw-medium">
+                <% if (shipping && shipping > 0) { %>
+                  ₹<%= shipping.toFixed(2) %>
+                <% } else { %>
+                  <span class="text-success">FREE</span>
+                <% } %>
+              </span>
+            </div>
             <hr class="my-2">
             <div class="d-flex justify-content-between">
               <span class="fw-bold">Order Total:</span>

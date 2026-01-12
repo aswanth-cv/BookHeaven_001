@@ -3,6 +3,7 @@ const OTP = require("../../models/otpSchema");
 const hashPasswordHelper = require("../../helpers/hash");
 const { sendOtpEmail } = require("../../helpers/sendMail");
 const { createOtpMessage } = require("../../helpers/email-mask");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const {
   validateBasicOtp,
@@ -14,7 +15,7 @@ const getForgotPassword = async (req, res) => {
     res.render("forgotPassword");
   } catch (error) {
     console.log("Error in getting getForgotPassword", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });
@@ -28,7 +29,7 @@ const postForgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Email not exists",
       });
@@ -58,13 +59,13 @@ const postForgotPassword = async (req, res) => {
 
     const otpMessage = createOtpMessage(email, 'forgot-password');
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       message: otpMessage.message,
       success: true,
       expiresIn: 60,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal Server Error",
     });
@@ -78,7 +79,7 @@ const resendOtp = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Email not exists",
       });
@@ -105,14 +106,14 @@ const resendOtp = async (req, res) => {
 
     const otpMessage = createOtpMessage(email, 'resend');
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       message: otpMessage.message,
       success: true,
       expiresIn: 60,
     });
   } catch (error) {
     console.log("Error in resending OTP");
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal Server Error",
     });
@@ -130,7 +131,7 @@ const getOtpForgotPassword = async (req, res) => {
     });
   } catch (error) {
     console.log("Error in getting OTP verification page", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });
@@ -143,7 +144,7 @@ const verifyOtp = async (req, res) => {
 
     const otpValidation = validateBasicOtp(otp);
     if (!otpValidation.isValid) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: otpValidation.message,
       });
@@ -151,7 +152,7 @@ const verifyOtp = async (req, res) => {
 
     const sessionValidation = validateOtpSession(req, "password-reset");
     if (!sessionValidation.isValid) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: sessionValidation.message,
         sessionExpired: sessionValidation.sessionExpired,
@@ -164,7 +165,7 @@ const verifyOtp = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "User not found",
       });
@@ -173,14 +174,14 @@ const verifyOtp = async (req, res) => {
     const otpDoc = await OTP.findOne({ email, purpose: "password-reset" });
 
     if (!otpDoc) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "OTP has expired! Please request a new one",
       });
     }
 
     if (String(otp) !== String(otpDoc.otp)) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Invalid OTP",
       });
@@ -188,13 +189,13 @@ const verifyOtp = async (req, res) => {
 
     await OTP.deleteOne({ _id: otpDoc._id });
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: "OTP verification successful. You can now reset your password",
     });
   } catch (error) {
     console.log("Error verifying reset OTP", error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });
@@ -207,7 +208,7 @@ const getResetPassword = async (req, res) => {
   try {
     res.render("resetPasswordForm");
   } catch (error) {
-    return res.status(500).json({ message: "Server Error" });
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: "Server Error" });
   }
 };
 
@@ -216,7 +217,7 @@ const patchResetPassword = async (req, res) => {
     const { newPassword, confirmPassword } = req.body;
 
     if (newPassword !== confirmPassword) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Passwords don't match",
       });
@@ -226,26 +227,34 @@ const patchResetPassword = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "User not found",
       });
     }
 
     const hashedPassword = await hashPasswordHelper.hashPassword(newPassword);
-
+              
     user.password = hashedPassword;
     await user.save();
 
-    req.session.destroy();
+    // Only remove user session data, don't destroy entire session
+    delete req.session.user_id;
+    delete req.session.user_email;
+    if (req.session.passport) {
+      delete req.session.passport.user;
+    }
+    
+    // Save the session changes
+    req.session.save();
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: "Password updated successfully. Please login again.",
     });
   } catch (error) {
     console.log("Error in updating password", error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });

@@ -2,18 +2,44 @@ const Product = require("../../models/productSchema");
 const Category = require("../../models/categorySchema");
 const Cart = require("../../models/cartSchema");
 const Wishlist = require("../../models/wishlistSchema");
+const { getActiveOfferForProduct, calculateDiscount } = require("../../utils/offer-helper");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const productDetails = async (req, res) => {
   try {
     const userId = req.session.user_id;
     const productId = req.params.id;
 
+
+
     const product = await Product.findById(productId).populate("category");
     if (!product || !product.isListed || product.isDeleted) {
       return res.status(500).render("pageNotFound");
     }
 
-    product.finalPrice = product.salePrice || product.regularPrice;
+    // Apply offer to main product
+    const offer = await getActiveOfferForProduct(
+      product._id,
+      product.category._id,
+      product.salePrice
+    );
+
+    if (offer) {
+      const { discountAmount, discountPercentage, finalPrice } = calculateDiscount(offer, product.salePrice);
+      
+      product.originalPrice = product.salePrice;
+      product.finalPrice = finalPrice;
+      product.activeOffer = offer;
+      product.discountAmount = discountAmount;
+      product.discountPercentage = discountPercentage;
+    } else {
+      product.originalPrice = product.salePrice;
+      product.finalPrice = product.salePrice;
+      product.activeOffer = null;
+      product.discountAmount = 0;
+      product.discountPercentage = 0;
+    }
+
     product.regularPrice = product.regularPrice || product.salePrice;
 
     const relatedProducts = await Product.aggregate([
@@ -28,8 +54,30 @@ const productDetails = async (req, res) => {
       { $sample: { size: 4 } },
     ]);
 
+    // Apply offers to related products
     for (const relatedProduct of relatedProducts) {
-      relatedProduct.finalPrice = relatedProduct.salePrice || relatedProduct.regularPrice;
+      const relatedOffer = await getActiveOfferForProduct(
+        relatedProduct._id,
+        relatedProduct.category,
+        relatedProduct.salePrice
+      );
+
+      if (relatedOffer) {
+        const { discountAmount, discountPercentage, finalPrice } = calculateDiscount(relatedOffer, relatedProduct.salePrice);
+        
+        relatedProduct.originalPrice = relatedProduct.salePrice;
+        relatedProduct.finalPrice = finalPrice;
+        relatedProduct.activeOffer = relatedOffer;
+        relatedProduct.discountAmount = discountAmount;
+        relatedProduct.discountPercentage = discountPercentage;
+      } else {
+        relatedProduct.originalPrice = relatedProduct.salePrice;
+        relatedProduct.finalPrice = relatedProduct.salePrice;
+        relatedProduct.activeOffer = null;
+        relatedProduct.discountAmount = 0;
+        relatedProduct.discountPercentage = 0;
+      }
+
       relatedProduct.regularPrice = relatedProduct.regularPrice || relatedProduct.salePrice;
     }
 
@@ -41,7 +89,7 @@ const productDetails = async (req, res) => {
     if (userId) {
       const cart = await Cart.findOne({ user: userId });
       if (cart) {
-        cartCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+        cartCount = cart.items.length;
         isInCart = cart.items.some(item => item.product.toString() === productId);
       }
 
@@ -70,4 +118,31 @@ const productDetails = async (req, res) => {
   }
 };
 
-module.exports = { productDetails };
+// Get current stock for a product (for real-time updates)
+const getProductStock = async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const product = await Product.findById(productId).select('stock isListed isDeleted');
+    
+    if (!product || !product.isListed || product.isDeleted) {
+      return res.status(HttpStatus.NOT_FOUND).json({
+        success: false,
+        message: "Product not found or unavailable"
+      });
+    }
+
+    res.json({
+      success: true,
+      stock: product.stock,
+      isAvailable: product.stock > 0
+    });
+  } catch (error) {
+    console.error("Error fetching product stock:", error);
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+module.exports = { productDetails, getProductStock };

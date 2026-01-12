@@ -99,11 +99,11 @@
                   <div class="d-flex flex-column align-items-start align-items-md-end justify-content-md-end gap-2">
                     <% if (item.product.activeOffer && item.product.discountPercentage > 0) { %>
                       <div class="text-end">
-                        <span class="text-decoration-line-through text-muted me-2">₹<%= item.product.regularPrice.toFixed(2) %></span>
-                        <span class="fw-bold">₹<%= item.product.salePrice.toFixed(2) %></span>
+                        <span class="text-decoration-line-through text-muted me-2">₹<%= item.product.originalPrice.toFixed(2) %></span>
+                        <span class="fw-bold">₹<%= item.product.finalPrice.toFixed(2) %></span>
                       </div>
                     <% } else { %>
-                      <span class="fw-bold">₹<%= item.product.salePrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= item.product.finalPrice.toFixed(2) %></span>
                     <% } %>
                     <div class="item-actions d-flex gap-2">
                       <button class="btn btn-dark btn-sm add-to-cart px-3" <%= item.product.stock === 0 ? 'disabled' : '' %>>Add to Cart</button>
@@ -157,7 +157,7 @@
           </div>
           <div class="d-flex justify-content-between mb-3">
             <span>Estimated Value</span>
-            <span class="fw-semibold">₹<%= wishlistItems.reduce((sum, item) => sum + item.product.salePrice, 0).toFixed(2) %></span>
+            <span class="fw-semibold">₹<%= wishlistItems.reduce((sum, item) => sum + item.product.finalPrice, 0).toFixed(2) %></span>
           </div>
           <button class="btn btn-dark w-100 py-3 fw-medium" id="addAllToCartSummaryBtn" <%= totalItems === 0 ? 'disabled' : '' %>>Add All to Cart</button>
         </div>
@@ -203,11 +203,11 @@
                 <div>
                   <% if (product.activeOffer && product.discountPercentage > 0) { %>
                     <div>
-                      <span class="text-decoration-line-through text-muted me-1" style="font-size: 0.8rem;">₹<%= product.regularPrice.toFixed(2) %></span>
-                      <span class="fw-bold">₹<%= product.salePrice.toFixed(2) %></span>
+                      <span class="text-decoration-line-through text-muted me-1" style="font-size: 0.8rem;">₹<%= product.originalPrice.toFixed(2) %></span>
+                      <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                     </div>
                   <% } else { %>
-                    <span class="fw-bold">₹<%= product.salePrice.toFixed(2) %></span>
+                    <span class="fw-bold">₹<%= product.finalPrice.toFixed(2) %></span>
                   <% } %>
                   <span class="stock-status <%= product.stock > 10 ? 'in-stock' : product.stock > 0 ? 'low-stock' : 'out-of-stock' %>">
                     <i class="ri-<%= product.stock > 10 ? 'checkbox-circle-line' : product.stock > 0 ? 'alert-line' : 'close-circle-line' %> me-1"></i>
@@ -421,36 +421,92 @@
     const cartCountElement = document.querySelector('.cart-count');
     const wishlistCountElement = document.querySelector('.wishlist-count');
     
-    // Add all to cart
+    // Add all to cart - removes only successfully added items
     [addAllToCartBtn, addAllToCartSummaryBtn].forEach(btn => {
       if (btn) {
         btn.addEventListener('click', async function () {
+          // Disable button during request
+          const originalText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Adding...';
+
           try {
             const response = await fetch('/wishlist/add-all-to-cart', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' }
             });
             const result = await response.json();
-  
-            if (result.success) {
-              // Update cart count but keep wishlist intact
+
+            console.log('Add all to cart result:', result);
+
+            // Re-enable button
+            btn.disabled = false;
+            btn.textContent = originalText;
+
+            if (result.success || result.addedCount > 0) {
+              // Update cart count
               cartCountElement.textContent = result.cartCount;
               cartCountElement.dataset.count = result.cartCount;
+
+              // Update wishlist count (backend already removed added items)
               wishlistCountElement.textContent = result.wishlistCount;
               wishlistCountElement.dataset.count = result.wishlistCount;
-  
-              let message = result.message;
-              if (result.warnings && result.warnings.length > 0) {
-                message += '<br>' + result.warnings.join('<br>');
+
+              // Remove successfully added items from DOM
+              if (result.addedProductIds && result.addedProductIds.length > 0) {
+                result.addedProductIds.forEach(productId => {
+                  const item = document.querySelector(`.wishlist-item[data-product-id="${productId}"]`);
+                  if (item) {
+                    item.style.opacity = '0';
+                    item.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => {
+                      item.remove();
+                      
+                      // Check if wishlist is now empty
+                      const remainingItems = document.querySelectorAll('.wishlist-item').length;
+                      if (remainingItems === 0) {
+                        if (emptyWishlist) emptyWishlist.classList.remove('d-none');
+                        if (wishlistItemsContainer) wishlistItemsContainer.classList.add('d-none');
+                        if (wishlistSummary) wishlistSummary.classList.add('d-none');
+                      } else {
+                        // Update wishlist title
+                        const titleElement = document.querySelector('.wishlist-items h2');
+                        if (titleElement) {
+                          titleElement.textContent = `Wishlist (${remainingItems} items)`;
+                        }
+                      }
+                    }, 300);
+                  }
+                });
               }
-  
+
+              // Build detailed message
+              let messageHtml = `<strong>${result.message}</strong>`;
+              
+              if (result.successMessages && result.successMessages.length > 0) {
+                messageHtml += '<br><br><small style="color: #10b981;">✓ Added:</small>';
+                messageHtml += '<br><small>' + result.successMessages.slice(0, 3).join('<br>') + '</small>';
+                if (result.successMessages.length > 3) {
+                  messageHtml += `<br><small>...and ${result.successMessages.length - 3} more</small>`;
+                }
+              }
+
+              if (result.errorMessages && result.errorMessages.length > 0) {
+                messageHtml += '<br><br><small style="color: #f59e0b;">⚠ Skipped (kept in wishlist):</small>';
+                messageHtml += '<br><small>' + result.errorMessages.slice(0, 3).join('<br>') + '</small>';
+                if (result.errorMessages.length > 3) {
+                  messageHtml += `<br><small>...and ${result.errorMessages.length - 3} more</small>`;
+                }
+              }
+
               Swal.fire({
                 toast: true,
                 position: 'top-end',
-                icon: 'success',
-                html: message,
+                icon: result.skippedCount > 0 ? 'warning' : 'success',
+                html: messageHtml,
                 showConfirmButton: false,
-                timer: 3000
+                timer: 5000,
+                timerProgressBar: true
               });
             } else {
               Swal.fire({
@@ -459,11 +515,14 @@
                 icon: 'error',
                 title: result.message,
                 showConfirmButton: false,
-                timer: 1500
+                timer: 2000
               });
             }
           } catch (error) {
             console.error('Error adding all to cart:', error);
+            btn.disabled = false;
+            btn.textContent = originalText;
+            
             Swal.fire({
               toast: true,
               position: 'top-end',
@@ -548,48 +607,152 @@
       const addToCartBtn = item.querySelector('.add-to-cart');
       const removeBtn = item.querySelector('.remove-item');
   
-      // Add to cart
+      // Add to cart from wishlist with stock validation
+      // IMPORTANT: Does NOT remove item from wishlist after adding to cart
       if (addToCartBtn) {
         addToCartBtn.addEventListener('click', async function () {
+          // Disable button during request
+          const originalText = addToCartBtn.textContent;
+          addToCartBtn.disabled = true;
+          addToCartBtn.textContent = 'Adding...';
+
           try {
-            const response = await fetch('/cart/add', {
+            const response = await fetch(`/cart/add-from-wishlist/${productId}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ productId, quantity: 1 })
+              headers: { 'Content-Type': 'application/json' }
             });
+            
+            // Debug logging
+            console.log('Add to cart response:', {
+              status: response.status,
+              ok: response.ok,
+              statusText: response.statusText
+            });
+            
             const result = await response.json();
+            console.log('Add to cart result:', result);
   
-            if (result.success) {
-              cartCountElement.textContent = result.cartCount;
-              cartCountElement.dataset.count = result.cartCount;
-  
+            // CRITICAL FIX: Check BOTH response.ok AND result.success
+            // response.ok is false for 400/404/500 status codes
+            // result.success is the business logic success flag
+            if (response.ok && result.success) {
+              // SUCCESS: Item was added to cart
+              console.log('✅ Success: Item added to cart, removing from wishlist');
+              
+              // Update cart count
+              if (cartCountElement) {
+                cartCountElement.textContent = result.cartCount;
+                cartCountElement.dataset.count = result.cartCount;
+              }
+
+              // Show success message
               Swal.fire({
                 toast: true,
                 position: 'top-end',
                 icon: 'success',
-                title: result.message,
+                title: result.message || 'Added to cart successfully',
                 showConfirmButton: false,
-                timer: 1500
+                timer: 2000
               });
+
+              // REMOVE from wishlist after successful add
+              try {
+                const toggleResp = await fetch('/wishlist/toggle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ productId })
+                });
+                const toggleResult = await toggleResp.json();
+                
+                if (toggleResult && toggleResult.success) {
+                  console.log('✅ Removed from wishlist');
+                  
+                  // Update wishlist count
+                  if (wishlistCountElement) {
+                    wishlistCountElement.textContent = toggleResult.wishlistCount;
+                    wishlistCountElement.dataset.count = toggleResult.wishlistCount;
+                  }
+
+                  // Animate and remove item from DOM
+                  item.style.opacity = '0';
+                  item.style.transition = 'opacity 0.3s ease';
+                  
+                  setTimeout(() => {
+                    item.remove();
+                    
+                    // Check if wishlist is now empty
+                    const remainingItems = document.querySelectorAll('.wishlist-item').length;
+                    if (remainingItems === 0) {
+                      if (emptyWishlist) emptyWishlist.classList.remove('d-none');
+                      if (wishlistItemsContainer) wishlistItemsContainer.classList.add('d-none');
+                      if (wishlistSummary) wishlistSummary.classList.add('d-none');
+                    } else {
+                      // Update wishlist title
+                      const titleElement = document.querySelector('.wishlist-items h2');
+                      if (titleElement) {
+                        titleElement.textContent = `Wishlist (${remainingItems} items)`;
+                      }
+                      
+                      // Update summary if exists
+                      if (typeof updateWishlistSummaryDirectly === 'function') {
+                        updateWishlistSummaryDirectly();
+                      }
+                    }
+                  }, 300);
+                }
+              } catch (e) {
+                console.error('Error removing from wishlist:', e);
+                // Don't show error to user - item was added to cart successfully
+              }
             } else {
+              // ERROR: Validation failed or network error
+              console.log('❌ Error: Add to cart failed', {
+                responseOk: response.ok,
+                resultSuccess: result.success,
+                message: result.message
+              });
+              
+              // Re-enable button on error
+              addToCartBtn.disabled = false;
+              addToCartBtn.textContent = originalText;
+
+              // Show specific error messages based on error type
+              let errorTitle = result.message || 'Failed to add to cart';
+              let errorIcon = 'error';
+
+              if (result.stockExceeded) {
+                errorIcon = 'warning';
+              } else if (result.isQuantityLimitReached) {
+                errorIcon = 'info';
+              } else if (result.outOfStock) {
+                errorIcon = 'error';
+                // Disable button permanently if out of stock
+                addToCartBtn.disabled = true;
+                addToCartBtn.textContent = 'Out of Stock';
+              }
+
               Swal.fire({
                 toast: true,
                 position: 'top-end',
-                icon: 'error',
-                title: result.message,
+                icon: errorIcon,
+                title: errorTitle,
                 showConfirmButton: false,
-                timer: 1500
+                timer: 3000
               });
             }
           } catch (error) {
-            console.error('Error adding to cart:', error);
+            // Network error or JSON parse error
+            console.error('❌ Exception in add to cart:', error);
+            addToCartBtn.disabled = false;
+            addToCartBtn.textContent = originalText;
+            
             Swal.fire({
               toast: true,
               position: 'top-end',
               icon: 'error',
-              title: 'Error adding to cart',
+              title: 'Network error - please try again',
               showConfirmButton: false,
-              timer: 1500
+              timer: 2000
             });
           }
         });

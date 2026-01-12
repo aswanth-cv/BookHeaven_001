@@ -1,5 +1,5 @@
 const { createValidationMiddleware } = require('../../helpers/validation-helper');
-
+const { HttpStatus } = require("../../helpers/status-code");
 
 const validateWishlistToggle = createValidationMiddleware({
   productId: {
@@ -14,7 +14,7 @@ const validateWishlistAuth = (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to manage wishlist'
       });
@@ -24,7 +24,7 @@ const validateWishlistAuth = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Wishlist auth validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -45,7 +45,7 @@ const validateClearWishlist = (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to clear wishlist'
       });
@@ -55,7 +55,7 @@ const validateClearWishlist = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Clear wishlist validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });

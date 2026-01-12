@@ -1,3 +1,6 @@
+const { HttpStatus } = require("../../helpers/status-code");
+
+
 const loginValidator = (req, res, next) => {
      const { email, password } = req.body;
      const errors = {};
@@ -14,7 +17,7 @@ const loginValidator = (req, res, next) => {
      }
    
      if (Object.keys(errors).length > 0) {
-       return res.status(400).json({
+       return res.status(HttpStatus.BAD_REQUEST).json({
          success: false,
          message: Object.values(errors).join(", "),
        });

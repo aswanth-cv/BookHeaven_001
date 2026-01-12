@@ -98,8 +98,12 @@
                           <div class="d-flex flex-column flex-md-row gap-3 <%= index > 0 ? 'mt-3 pt-3 border-top' : '' %>">
                             <div class="order-item-image">
                               <img 
-                                src="<%= item.image || 'https://via.placeholder.com/120x160' %>" 
-                                alt="<%= item.title || 'Product' %>" 
+                                src="<% 
+                                  const rawImg = item.image || (item.product && (item.product.mainImage || (item.product.subImages && item.product.subImages[0])));
+                                  const isAbs = rawImg && (rawImg.startsWith('http://') || rawImg.startsWith('https://') || rawImg.startsWith('/'));
+                                  const resolved = rawImg ? (isAbs ? rawImg : ('/' + rawImg.replace(/^\/+/, ''))) : 'https://via.placeholder.com/120x160';
+                                %><%= resolved %>" 
+                                alt="<%= item.title || (item.product && item.product.title) || 'Product' %>" 
                                 class="img-fluid rounded"
                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/120x160'"
                               >
@@ -163,7 +167,10 @@
                           <% if (['Shipped', 'Delivered'].includes(order.orderStatus)) { %>
                             <a href="/orders/<%= order._id %>/track" class="btn btn-outline-dark btn-sm">Track Package</a>
                           <% } %>
-                          <a href="/orders/<%= order._id %>/invoice/download" class="btn btn-outline-dark btn-sm" onclick="downloadInvoice(event, '<%= order._id %>', '<%= order.orderNumber %>')">Download Invoice</a>
+                          <% const hideInvoice = ['Returned', 'Return Requested', 'Partially Returned', 'Partially Return Requested'].includes(order.orderStatus); %>
+                          <% if (!hideInvoice) { %>
+                            <a href="/orders/<%= order._id %>/invoice/download" class="btn btn-outline-dark btn-sm" onclick="downloadInvoice(event, '<%= order._id %>', '<%= order.orderNumber %>')">Download Invoice</a>
+                          <% } %>
                           <% if (order.orderStatus === 'Delivered' || order.orderStatus === 'Partially Returned') { %>
                             <a href="#" class="btn btn-outline-dark btn-sm">Write a Review</a>
                           <% } %>

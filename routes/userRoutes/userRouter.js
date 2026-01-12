@@ -1,7 +1,7 @@
 
 const express = require('express');
-
 const userRouter = express.Router();
+
 
 const userController = require("../../controllers/userController/userController");
 const { isNotAuthenticated, preventBackButtonCache, isAuthenticated } = require('../../middlewares/authMiddleware');
@@ -21,7 +21,13 @@ const cartController = require("../../controllers/userController/cartController"
 const wishlistController = require("../../controllers/userController/wishlist-controller");
 const checkoutController = require("../../controllers/userController/checkoutController");
 const changePasswordController = require("../../controllers/userController/changePasswordController");
+const walletController = require("../../controllers/userController/walletController");
+const userCouponController = require("../../controllers/userController/userCouponController");
+const referralController =require("../../controllers/userController/referral-controller");
 const passport = require("passport");
+
+
+
 
 
 
@@ -58,6 +64,7 @@ userRouter.get("/auth/google/callback", googleController.googleController);
 // Product routes
 userRouter.get('/shopPage', shopPageController.shopPage);
 userRouter.get('/products/:id', productDetailsController.productDetails);
+userRouter.get('/products/:id/stock', productDetailsController.getProductStock);
 
 
 
@@ -82,9 +89,15 @@ userRouter.get('/verify-email-otp', isAuthenticated, preventBackButtonCache, (re
 userRouter.post("/verify-email-otp",isAuthenticated,profileController.verifyEmailOtp);
 userRouter.post("/verify-resend-otp",isAuthenticated,profileController.resendEmailOtp);
 
-
+const addressValidator = require("../../validators/user/address-validator")
 userRouter.get("/address",isAuthenticated,addressController.getAddress);
-userRouter.post("/address",isAuthenticated,addressController.addresses);
+userRouter.post("/address",
+  isAuthenticated,
+  addressValidator.validateAddressData,
+  addressValidator.validateState,
+  addressController.addresses
+
+);
 userRouter.put("/address/:id",isAuthenticated,addressController.updateAddress);
 userRouter.delete("/address/:id",isAuthenticated,addressController.deleteAddress);
 userRouter.patch("/address/:id/default",isAuthenticated,addressController.setDefaultAddress);
@@ -115,6 +128,13 @@ userRouter.post('/cart/clear',
   cartValidator.validateCartCheckout,
   cartController.clearCart
 );
+userRouter.post('/cart/add-from-wishlist/:productId',
+  isAuthenticated,
+  cartController.addFromWishlist
+);
+userRouter.get('/cart/get-quantities',
+  cartController.getCartQuantities
+);
 
 // Wishlist routes with validation
 const wishlistValidator = require('../../validators/user/wishlist-validator');
@@ -129,10 +149,19 @@ userRouter.post('/wishlist/add-all-to-cart',
   wishlistValidator.validateWishlistAuth,
   wishlistController.addAllToCart
 );
+userRouter.post('/wishlist/add-to-cart',
+  isAuthenticated,
+  wishlistValidator.validateWishlistAuth,
+  wishlistController.addToCartFromWishlist
+);
 userRouter.post('/wishlist/clear',
   isAuthenticated,
   wishlistValidator.validateClearWishlist,
   wishlistController.clearWishlist
+);
+userRouter.get('/wishlist/debug',
+  isAuthenticated,
+  wishlistController.getWishlistDebug
 );
 
 // Checkout routes
@@ -142,14 +171,34 @@ userRouter.post('/checkout/place-order', isAuthenticated, checkoutController.pla
 
 userRouter.get("/orders",isAuthenticated,orderController.getOrders);
 userRouter.post('/orders/:id/cancel',isAuthenticated,orderController.cancelOrder);
+userRouter.post('/orders/:id/items/:productId/cancel',isAuthenticated, orderController.cancelOrderItem);
+userRouter.post('/orders/:id/return',  isAuthenticated,orderController.returnOrder);
+userRouter.post('/orders/:id/items/:productId/return',isAuthenticated,orderController.returnOrderItem);
 userRouter.get('/orders/:id', isAuthenticated, orderController.getOrderDetails);
 userRouter.get('/order-success/:id', isAuthenticated, orderController.getOrderSuccess);
 userRouter.get('/orders/:id/invoice', isAuthenticated, orderController.viewInvoice);
 userRouter.get('/orders/:id/invoice/download', isAuthenticated, orderController.downloadInvoice);
 
 userRouter.post('/change-password', isAuthenticated, changePasswordController.changePassword);
+userRouter.get("/wallet",isAuthenticated,walletController.getWallet);
 
 
+userRouter.post("/create-razorpay-order", isAuthenticated, checkoutController.createRazorpayOrder);
+userRouter.post("/checkout/verify-payment", isAuthenticated, checkoutController.verifyPayment);
+userRouter.post("/checkout/payment-failure", isAuthenticated, checkoutController.handlePaymentFailure);
+userRouter.get("/payment-failure", checkoutController.getPaymentFailure);  
+userRouter.post("/checkout/apply-coupon", isAuthenticated, checkoutController.applyCoupon);
+userRouter.post("/checkout/remove-coupon", isAuthenticated, checkoutController.removeCoupon);
+userRouter.get('/checkout/current-total', isAuthenticated, checkoutController.getCurrentCartTotal);
+userRouter.post('/checkout/validate-stock', isAuthenticated, checkoutController.validateStock);
+
+
+
+userRouter.get('/user-coupons', isAuthenticated, userCouponController.getUserCoupons);
+
+// Referral routes
+userRouter.get('/referrals', isAuthenticated, referralController.getReferrals);
+userRouter.post('/validate-referral', referralController.validateReferral);
 
 
 module.exports = userRouter

@@ -1,9 +1,7 @@
 const { createValidationMiddleware, validateObjectId, validateText } = require('../../helpers/validation-helper');
-const { HttpStatus } = require('../../helpers/status-code');
+const { HttpStatus } = require("../../helpers/status-code");
 
-/**
- * Validate place order request
- */
+
 const validatePlaceOrder = createValidationMiddleware({
   addressId: {
     type: 'objectId',
