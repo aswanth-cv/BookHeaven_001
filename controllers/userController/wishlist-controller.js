@@ -2,6 +2,8 @@ const Wishlist = require("../../models/wishlistSchema")
 const Product = require("../../models/productSchema")
 const Cart = require("../../models/cartSchema")
 const { getActiveOfferForProduct, calculateDiscount } = require("../../utils/offer-helper")
+const { HttpStatus } = require("../../helpers/status-code");
+const { ErrorMessages } = require("../../helpers/error-messages");
 
 const getWishlist = async (req, res) => {
   try {
@@ -117,14 +119,14 @@ const getWishlist = async (req, res) => {
       isAuthenticated: true,
     })
   } catch (error) {
-    res.status(500).send("Server Error")
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(ErrorMessages.SERVER.INTERNAL_ERROR)
   }
 }
 
 const toggleWishlist = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please log in to manage your wishlist',
         requiresAuth: true,
@@ -137,7 +139,7 @@ const toggleWishlist = async (req, res) => {
     const product = await Product.findById(productId);
 
     if (!product || !product.isListed || product.isDeleted) {
-      return res.status(404).json({ success: false, message: 'Product not found or unavailable' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Product not found or unavailable' });
     }
 
     let wishlist = await Wishlist.findOne({ user: userId });
@@ -163,14 +165,14 @@ const toggleWishlist = async (req, res) => {
       return res.json({ success: true, message: 'Added to wishlist', isWishlisted: true, wishlistCount: wishlist.items.length });
     }
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
   }
 };
 
 const addAllToCart = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Please log in' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Please log in' });
     }
 
     const userId = req.session.user_id;
@@ -178,7 +180,7 @@ const addAllToCart = async (req, res) => {
     const wishlist = await Wishlist.findOne({ user: userId }).populate('items.product');
 
     if (!wishlist || wishlist.items.length === 0) {
-      return res.status(404).json({ success: false, message: 'Wishlist is empty' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Wishlist is empty' });
     }
 
     let cart = await Cart.findOne({ user: userId });
@@ -204,7 +206,7 @@ const addAllToCart = async (req, res) => {
       const productId = product._id.toString();
       
       if (product.stock === 0) {
-        errorMessages.push(`${productTitle}: Out of stock`);
+        errorMessages.push(`${productTitle}: ${ErrorMessages.PRODUCT.OUT_OF_STOCK}`);
         skippedCount++;
         continue; 
       }
@@ -221,7 +223,7 @@ const addAllToCart = async (req, res) => {
       const newQuantity = existingQuantity + 1;
 
       if (newQuantity > MAX_QUANTITY_PER_PRODUCT) {
-        errorMessages.push(`${productTitle}: Maximum ${MAX_QUANTITY_PER_PRODUCT} items allowed`);
+        errorMessages.push(`${productTitle}: ${ErrorMessages.CART.MAX_QUANTITY_EXCEEDED}`);
         skippedCount++;
         continue;
       }
@@ -326,7 +328,7 @@ const addAllToCart = async (req, res) => {
   } catch (error) {
     console.error(' Error in bulk add to cart:', error);
     
-    res.status(500).json({ 
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ 
       success: false, 
       message: 'Server error occurred while adding items to cart',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -337,7 +339,7 @@ const addAllToCart = async (req, res) => {
 const addToCartFromWishlist = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: "Please log in to add items to your cart",
         requiresAuth: true,
@@ -351,16 +353,16 @@ const addToCartFromWishlist = async (req, res) => {
 
     const product = await Product.findById(productId);
     if (!product || !product.isListed || product.isDeleted) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Product not found or unavailable"
       });
     }
 
     if (product.stock === 0) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
-        message: "This product is currently out of stock",
+        message: ErrorMessages.PRODUCT.OUT_OF_STOCK,
         outOfStock: true
       });
     }
@@ -381,7 +383,7 @@ const addToCartFromWishlist = async (req, res) => {
 
     if (totalQuantity > product.stock) {
       const available = product.stock - existingQuantity;
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: available > 0
           ? `Cannot add — only ${available} item(s) available. You already have ${existingQuantity} in your cart.`
@@ -392,7 +394,7 @@ const addToCartFromWishlist = async (req, res) => {
 
     if (totalQuantity > MAX_QUANTITY_PER_PRODUCT) {
       const remainingAllowed = MAX_QUANTITY_PER_PRODUCT - existingQuantity;
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: remainingAllowed > 0
           ? `You can only add ${remainingAllowed} more of this item. Maximum ${MAX_QUANTITY_PER_PRODUCT} items allowed per product.`
@@ -457,7 +459,7 @@ const addToCartFromWishlist = async (req, res) => {
       const cartCount = cart.items.length;
       const wishlistCount = wishlist ? wishlist.items.length : 0;
 
-      return res.status(200).json({
+      return res.status(HttpStatus.OK).json({
         success: true,
         message: "Added to cart and removed from wishlist",
         cartCount,
@@ -465,14 +467,14 @@ const addToCartFromWishlist = async (req, res) => {
       });
     } catch (saveError) {
       console.error(" Error saving cart or wishlist:", saveError);
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Error saving changes"
       });
     }
   } catch (error) {
     console.error(" Error adding from wishlist to cart:", error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server error"
     });
@@ -482,7 +484,7 @@ const addToCartFromWishlist = async (req, res) => {
 const clearWishlist = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Please log in' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Please log in' });
     }
 
     const userId = req.session.user_id;
@@ -490,14 +492,14 @@ const clearWishlist = async (req, res) => {
 
     res.json({ success: true, message: 'Wishlist cleared', wishlistCount: 0 });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
   }
 };
 
 const getWishlistDebug = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Please log in' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Please log in' });
     }
 
     const userId = req.session.user_id;
@@ -515,7 +517,7 @@ const getWishlistDebug = async (req, res) => {
       })) || []
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 

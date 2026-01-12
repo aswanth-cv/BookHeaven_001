@@ -1,9 +1,7 @@
 const { createValidationMiddleware, validateObjectId, validateText } = require('../../helpers/validation-helper');
+const { HttpStatus } = require("../../helpers/status-code");
 
 
-/**
- * Validate place order request
- */
 const validatePlaceOrder = createValidationMiddleware({
   addressId: {
     type: 'objectId',
@@ -64,7 +62,7 @@ const validateOrderOwnership = (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to manage orders'
       });
@@ -74,7 +72,7 @@ const validateOrderOwnership = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Order ownership validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -152,7 +150,7 @@ const validateOrderSearch = (req, res, next) => {
     if (page) {
       const pageNum = parseInt(page);
       if (isNaN(pageNum) || pageNum < 1) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Invalid page number'
         });
@@ -164,7 +162,7 @@ const validateOrderSearch = (req, res, next) => {
     if (limit) {
       const limitNum = parseInt(limit);
       if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Invalid limit (1-100)'
         });
@@ -176,7 +174,7 @@ const validateOrderSearch = (req, res, next) => {
     if (status) {
       const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled', 'returned'];
       if (!validStatuses.includes(status)) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Invalid order status'
         });
@@ -188,7 +186,7 @@ const validateOrderSearch = (req, res, next) => {
     if (startDate) {
       const start = new Date(startDate);
       if (isNaN(start.getTime())) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Invalid start date'
         });
@@ -199,7 +197,7 @@ const validateOrderSearch = (req, res, next) => {
     if (endDate) {
       const end = new Date(endDate);
       if (isNaN(end.getTime())) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Invalid end date'
         });
@@ -211,7 +209,7 @@ const validateOrderSearch = (req, res, next) => {
     if (search) {
       const sanitizedSearch = search.trim();
       if (sanitizedSearch.length > 100) {
-        return res.status(400).json({
+        return res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
           message: 'Search term too long'
         });
@@ -223,7 +221,7 @@ const validateOrderSearch = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Order search validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });

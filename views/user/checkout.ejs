@@ -356,39 +356,29 @@
                         <p class="mb-3">Accepted payment methods:</p>
                         <div class="d-flex flex-wrap gap-3 mb-3">
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=visa"
-                              alt="Visa"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo visa">
+                              <span>VISA</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=mastercard"
-                              alt="Mastercard"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo mastercard">
+                              <span>MasterCard</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=rupay"
-                              alt="RuPay"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo rupay">
+                              <span>RuPay</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=upi"
-                              alt="UPI"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo upi">
+                              <span>UPI</span>
+                            </div>
                           </div>
                           <div class="payment-option">
-                            <img
-                              src="/api/placeholder/60/40?query=netbanking"
-                              alt="Netbanking"
-                              class="img-fluid"
-                            />
+                            <div class="payment-logo netbanking">
+                              <span>Net Banking</span>
+                            </div>
                           </div>
                         </div>
 
@@ -1351,6 +1341,53 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* Payment logo styles */
+  .payment-logo {
+    width: 60px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .payment-logo:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  .payment-logo.visa {
+    background: linear-gradient(135deg, #1a1f71, #0066cc);
+  }
+
+  .payment-logo.mastercard {
+    background: linear-gradient(135deg, #eb001b, #f79e1b);
+  }
+
+  .payment-logo.rupay {
+    background: linear-gradient(135deg, #00a651, #0066cc);
+  }
+
+  .payment-logo.upi {
+    background: linear-gradient(135deg, #ff6600, #ff9900);
+  }
+
+  .payment-logo.netbanking {
+    background: linear-gradient(135deg, #4a90e2, #357abd);
+  }
+
+  .payment-logo span {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
 
   @media (max-width: 767.98px) {

@@ -1,6 +1,6 @@
 const Wallet = require("../../models/walletSchema");
 const { calculateRefundAmount, validateRefundForPaymentMethod, calculateExactRefundAmount } = require("../../helpers/money-calculator");
-
+const { HttpStatus } = require("../../helpers/status-code");
 
 const getWallet = async (req, res) => {
   try {
@@ -91,7 +91,7 @@ const getWallet = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in getWallet:', error);
-    res.status(500).render('error', { message: 'Internal server error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('error', { message: 'Internal server error' });
   }
 };
 
@@ -115,11 +115,6 @@ const processCancelRefund = async (userId, order, productId = null) => {
           item._id?.toString() === productId?.toString()
         );
 
-        console.log('Item to cancel:', itemToCancel ? {
-          title: itemToCancel.title,
-          status: itemToCancel.status,
-          finalPrice: itemToCancel.priceBreakdown?.finalPrice || (itemToCancel.discountedPrice * itemToCancel.quantity)
-        } : 'NOT FOUND');
 
         if (itemToCancel) {
           existingRefund = existingWallet.transactions.find(transaction =>

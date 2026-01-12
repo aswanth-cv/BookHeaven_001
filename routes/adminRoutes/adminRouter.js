@@ -27,17 +27,19 @@ adminRoute.use(preventCache);
 
 
 adminRoute.get('/adminDashboard', dashboardController.getDashboard);
-
 adminRoute.get('/adminLogout', adminController.logoutAdminDashboard);
+
 
 adminRoute.get('/getUsers', adminUserController.getUsers);
 adminRoute.put('/getUsers/:id/block', adminUserController.blockUser);
 adminRoute.put('/getUsers/:id/unblock', adminUserController.unblockUser);
 
+
 adminRoute.get('/categories', categoryController.getCategory);
 adminRoute.post('/categories', upload.single('image'), categoryController.addCategory);
 adminRoute.put('/categories/:id', upload.single('image'), categoryController.editCategory);
 adminRoute.put('/categories/:id/toggle', categoryController.toggleCategoryStatus);
+
 
 adminRoute.get('/getProducts', productController.getProducts);
 adminRoute.get('/add-product', manageProductController.getAddProduct);
@@ -70,6 +72,8 @@ adminRoute.get('/getOrders', manageOrderController.getManageOrders);
 adminRoute.get('/orders/:id', manageOrderController.getOrderDetails);
 adminRoute.put('/orders/:id/status', manageOrderController.updateOrderStatus);
 adminRoute.put('/orders/:id/return-request', manageOrderController.approveReturnRequest);
+adminRoute.get('/orders/:id/invoice', manageOrderController.downloadInvoice);
+
 
 
 adminRoute.get('/return-management', returnManagementController.getReturnRequests);
@@ -79,7 +83,6 @@ adminRoute.post('/return-management/bulk-process', returnManagementController.bu
 
 
 //coupon management 
-
 adminRoute.get('/coupons', couponController.getCoupons);
 adminRoute.get('/coupons/:id', couponController.getCouponDetails);
 adminRoute.post('/coupons', couponController.createCoupon);

@@ -1,5 +1,6 @@
 const User = require("../../models/userSchema");
 const Referral = require("../../models/referralSchema");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const getReferrals = async (req, res) => {
   try {
@@ -20,7 +21,7 @@ const getReferrals = async (req, res) => {
     });
   } catch (error) {
     console.log("Error in rendering referrals page", error);
-    res.status(500).render("error", {
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render("error", {
       message: "Internal server error",
     });
   }
@@ -32,7 +33,7 @@ const validateReferral = async (req, res) => {
     const { referralCode } = req.body;
 
     if (!referralCode) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: "Referral code is required"
       });
@@ -42,13 +43,13 @@ const validateReferral = async (req, res) => {
     const referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
 
     if (!referrer) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Invalid referral code"
       });
     }
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: "Valid referral code",
       referrerName: referrer.fullName
@@ -56,7 +57,7 @@ const validateReferral = async (req, res) => {
 
   } catch (error) {
     console.error("Error validating referral code:", error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server error while validating referral code"
     });

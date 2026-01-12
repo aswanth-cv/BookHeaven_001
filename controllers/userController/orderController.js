@@ -8,6 +8,7 @@ const PDFDocument = require('pdfkit');
 const { processCancelRefund , processReturnRefund} = require("../../controllers/userController/walletController");
 const { validateCouponAfterItemCancellation, validateCouponAfterItemReturn } = require("../../helpers/coupon-validation");
 const { calculateExactRefundAmount } = require("../../helpers/money-calculator");
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 const getOrders = async (req, res) => {
@@ -150,7 +151,7 @@ const getOrderDetails = async (req, res) => {
     if (!user) return res.redirect('/login');
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return res.status(401).render('user/page-404', { 
+      return res.status(HttpStatus.UNAUTHORIZED).render('user/page-404', { 
         title: 'Invalid Order',
         message: 'Invalid order ID' 
       });
@@ -158,7 +159,7 @@ const getOrderDetails = async (req, res) => {
 
     const order = await Order.findById(orderId).populate('items.product');
     if (!order || order.user.toString() !== userId.toString()) {
-      return res.status(404).render('user/page-404', { 
+      return res.status(HttpStatus.NOT_FOUND).render('user/page-404', { 
         title: 'Order Not Found',
         message: 'Order not found' 
       });
@@ -374,7 +375,7 @@ const getOrderDetails = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching order details:', error);
-    res.status(500).render('user/page-404', { 
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('user/page-404', { 
       title: 'Error',
       message: 'Error fetching order details' 
     });
@@ -399,7 +400,7 @@ const getOrderSuccess = async (req, res) => {
     }).lean();
 
     if (!order) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         message: 'Order not found or you do not have access to this order',
         isAuthenticated: true
       });
@@ -418,21 +419,7 @@ const getOrderSuccess = async (req, res) => {
     // So the correct calculation is: subtotal - coupons + tax + shipping
     // NOT: subtotal - offers - coupons + tax + shipping
     const calculatedTotal = order.subtotal - totalCouponDiscount + (order.tax || 0) + (order.shipping || 0);
-    
-    // Add debug logging
-    console.log('📄 Success Page Debug:', {
-      orderData: {
-        subtotal: order.subtotal, // Already discounted
-        discount: order.discount,
-        couponDiscount: order.couponDiscount,
-        tax: order.tax,
-        shipping: order.shipping,
-        storedTotal: order.total
-      },
-      calculatedTotal: calculatedTotal,
-      difference: Math.abs(calculatedTotal - order.total),
-      note: 'subtotal is already discounted (after offers applied)'
-    });
+
 
     res.render('order-success', {
       orderNumber: order.orderNumber,
@@ -458,7 +445,7 @@ const getOrderSuccess = async (req, res) => {
     });
   } catch (error) {
     console.error('Error rendering order success page:', error);
-    res.status(500).render('user/page-404', {
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('user/page-404', {
       title: 'Error',
       message: 'Internal server error',
       isAuthenticated: req.session.user_id ? true : false
@@ -484,7 +471,7 @@ const viewInvoice = async (req, res) => {
     }).lean();
 
     if (!order) {
-      return res.status(404).render('user/page-404', {
+      return res.status(HttpStatus.NOT_FOUND).render('user/page-404', {
         title: 'Order Not Found',
         message: 'Order not found or you do not have access to this order'
       });
@@ -546,7 +533,7 @@ const viewInvoice = async (req, res) => {
 
   } catch (error) {
     console.error('Error viewing invoice:', error);
-    res.status(500).render('user/page-404', {
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('user/page-404', {
       title: 'Error',
       message: 'Error loading invoice'
     });
@@ -562,7 +549,7 @@ const downloadInvoice = async (req, res) => {
             .populate("items.product");
 
         if (!order) {
-            return res.status(404).send("Order not found");
+            return res.status(HttpStatus.NOT_FOUND).send("Order not found");
         }
 
         const formattedDate = new Date(order.createdAt).toLocaleDateString('en-US', {
@@ -743,7 +730,7 @@ const downloadInvoice = async (req, res) => {
 
     } catch (error) {
         console.error("Error generating invoice:", error);
-        res.status(500).send("Internal Server Error");
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Internal Server Error");
     }
 };
 
@@ -751,7 +738,7 @@ const downloadInvoice = async (req, res) => {
 const cancelOrder = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Unauthorized' });
     }
 
     const userId = req.session.user_id;
@@ -759,7 +746,7 @@ const cancelOrder = async (req, res) => {
     const { reason } = req.body;
 
     if (!reason || reason.trim() === '') {
-      return res.status(401).json({ success: false, message: 'Cancellation reason is required' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Cancellation reason is required' });
     }
 
     const order = await Order.findOne({
@@ -769,12 +756,12 @@ const cancelOrder = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Order not found' });
     }
 
     const allowedStatuses = ['Placed', 'Processing', 'Partially Cancelled'];
     if (!allowedStatuses.includes(order.orderStatus)) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: `Order cannot be cancelled in ${order.orderStatus} status`
       });
@@ -782,7 +769,7 @@ const cancelOrder = async (req, res) => {
 
     const activeItems = order.items.filter(item => item.status === 'Active');
     if (activeItems.length === 0) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'No active items found to cancel. All items have already been cancelled or returned.'
       });
@@ -842,13 +829,13 @@ const cancelOrder = async (req, res) => {
 
     await order.save();
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: 'Order cancelled successfully'
     });
   } catch (error) {
     console.error('Error cancelling order:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -859,7 +846,7 @@ const cancelOrder = async (req, res) => {
 const cancelOrderItem = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Unauthorized' });
     }
 
     const userId = req.session.user_id;
@@ -868,7 +855,7 @@ const cancelOrderItem = async (req, res) => {
     const { reason } = req.body;
 
     if (!reason || reason.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Cancellation reason is required' });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'Cancellation reason is required' });
     }
 
     const order = await Order.findOne({
@@ -878,7 +865,7 @@ const cancelOrderItem = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Order not found' });
     }
 
     const orderItem = order.items.find(item =>
@@ -886,12 +873,12 @@ const cancelOrderItem = async (req, res) => {
     );
 
     if (!orderItem) {
-      return res.status(404).json({ success: false, message: 'Item not found or already cancelled' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Item not found or already cancelled' });
     }
 
     const allowedStatuses = ['Placed', 'Processing', 'Partially Cancelled'];
     if (!allowedStatuses.includes(order.orderStatus)) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: `Items cannot be cancelled when order is in ${order.orderStatus} status`
       });
@@ -901,14 +888,14 @@ const cancelOrderItem = async (req, res) => {
     const couponValidation = await validateCouponAfterItemCancellation(order, productId);
     
     if (!couponValidation.success) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: couponValidation.message
       });
     }
 
     if (!couponValidation.allowPartialCancellation) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: couponValidation.message,
         requiresFullCancellation: true,
@@ -993,13 +980,13 @@ const cancelOrderItem = async (req, res) => {
 
     await order.save();
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: 'Item cancelled successfully'
     });
   } catch (error) {
     console.error('Error cancelling order item:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -1011,7 +998,7 @@ const cancelOrderItem = async (req, res) => {
 const returnOrder = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Unauthorized' });
     }
 
     const userId = req.session.user_id;
@@ -1019,7 +1006,7 @@ const returnOrder = async (req, res) => {
     const { reason } = req.body;
 
     if (!reason || reason.trim() === '') {
-      return res.status(400).json({ success: false, message: 'Return reason is required' });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'Return reason is required' });
     }
 
     const order = await Order.findOne({
@@ -1029,7 +1016,7 @@ const returnOrder = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Order not found' });
     }
 
     if (order.orderStatus !== 'Delivered' &&
@@ -1043,7 +1030,7 @@ const returnOrder = async (req, res) => {
 
     const deliveredDate = order.deliveredAt;
     if (!deliveredDate) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Order must be delivered before it can be returned.'
       });
@@ -1053,7 +1040,7 @@ const returnOrder = async (req, res) => {
     const daysSinceDelivery = Math.floor((Date.now() - deliveredDate.getTime()) / (24 * 60 * 60 * 1000));
 
     if (Date.now() - deliveredDate.getTime() > returnPeriod) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: `Return period has expired. Returns are only allowed within 7 days of delivery. Your order was delivered ${daysSinceDelivery} days ago.`
       });
@@ -1061,7 +1048,7 @@ const returnOrder = async (req, res) => {
 
     const activeItems = order.items.filter(item => item.status === 'Active');
     if (activeItems.length === 0) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'No active items found to return. All items have already been cancelled or returned.'
       });
@@ -1088,13 +1075,13 @@ const returnOrder = async (req, res) => {
 
     await order.save();
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: 'Return request submitted successfully. Our team will review your request.'
     });
   } catch (error) {
     console.error('Error processing return request:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -1106,7 +1093,7 @@ const returnOrder = async (req, res) => {
 const returnOrderItem = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Unauthorized' });
     }
 
     const userId = req.session.user_id;
@@ -1115,7 +1102,7 @@ const returnOrderItem = async (req, res) => {
     const { reason } = req.body;
 
     if (!reason || reason.trim() === '') {
-      return res.status(401).json({ success: false, message: 'Return reason is required' });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: 'Return reason is required' });
     }
 
     const order = await Order.findOne({
@@ -1125,13 +1112,13 @@ const returnOrderItem = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Order not found' });
     }
 
     if (order.orderStatus !== 'Delivered' &&
         order.orderStatus !== 'Partially Cancelled' &&
         order.orderStatus !== 'Partially Returned') {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: `Items cannot be returned when order is in ${order.orderStatus} status. Only delivered orders can be returned.`
       });
@@ -1139,7 +1126,7 @@ const returnOrderItem = async (req, res) => {
 
     const deliveredDate = order.deliveredAt;
     if (!deliveredDate) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Order must be delivered before items can be returned.'
       });
@@ -1149,7 +1136,7 @@ const returnOrderItem = async (req, res) => {
     const daysSinceDelivery = Math.floor((Date.now() - deliveredDate.getTime()) / (24 * 60 * 60 * 1000));
 
     if (Date.now() - deliveredDate.getTime() > returnPeriod) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: `Return period has expired. Returns are only allowed within 7 days of delivery. Your order was delivered ${daysSinceDelivery} days ago.`
       });
@@ -1158,11 +1145,11 @@ const returnOrderItem = async (req, res) => {
     const orderItem = order.items.find(item => item.product.toString() === productId);
 
     if (!orderItem) {
-      return res.status(404).json({ success: false, message: 'Product not found in this order' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Product not found in this order' });
     }
 
     if (orderItem.status !== 'Active') {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: `This item is already ${orderItem.status.toLowerCase()}`
       });
@@ -1172,14 +1159,14 @@ const returnOrderItem = async (req, res) => {
     const couponValidation = await validateCouponAfterItemReturn(order, productId);
     
     if (!couponValidation.success) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: couponValidation.message
       });
     }
 
     if (!couponValidation.allowPartialReturn) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: couponValidation.message,
         requiresFullReturn: true,
@@ -1205,13 +1192,13 @@ const returnOrderItem = async (req, res) => {
 
     await order.save();
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: 'Return request submitted successfully. Our team will review your request.'
     });
   } catch (error) {
     console.error('Error processing item return request:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });

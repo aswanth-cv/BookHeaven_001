@@ -89,7 +89,7 @@
         <h2 class="stat-title">Total Sales</h2>
         <p class="stat-value" id="totalSales"><%= summaryStats.totalSales %></p>
         <div class="text-muted small">
-          <i class="ri-calendar-line"></i> Current month
+          <i class="ri-calendar-line"></i> Successful orders
         </div>
       </div>
     </div>
@@ -102,11 +102,40 @@
         <h2 class="stat-title">Total Orders</h2>
         <p class="stat-value" id="totalOrders"><%= summaryStats.totalOrders %></p>
         <div class="text-muted small">
-          <i class="ri-calendar-line"></i> Current month
+          <i class="ri-calendar-line"></i> Successful orders
         </div>
       </div>
     </div>
 
+    <div class="col-sm-6 col-lg-3">
+      <div class="stat-card">
+        <div class="icon pending">
+          <i class="ri-close-circle-line"></i>
+        </div>
+        <h2 class="stat-title">Cancelled Orders</h2>
+        <p class="stat-value text-danger" id="totalCancelledOrders"><%= summaryStats.totalCancelledOrders %></p>
+        <div class="text-muted small">
+          <i class="ri-money-dollar-circle-line"></i> <%= summaryStats.totalCancelledValue %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <div class="stat-card">
+        <div class="icon users">
+          <i class="ri-arrow-go-back-line"></i>
+        </div>
+        <h2 class="stat-title">Returned Orders</h2>
+        <p class="stat-value text-warning" id="totalReturnedOrders"><%= summaryStats.totalReturnedOrders %></p>
+        <div class="text-muted small">
+          <i class="ri-money-dollar-circle-line"></i> <%= summaryStats.totalReturnedValue %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Additional Summary Row -->
+  <div class="row g-4 mb-4">
     <div class="col-sm-6 col-lg-3">
       <div class="stat-card">
         <div class="icon pending">
@@ -115,7 +144,7 @@
         <h2 class="stat-title">Total Discounts</h2>
         <p class="stat-value" id="totalDiscounts"><%= summaryStats.totalDiscounts %></p>
         <div class="text-muted small">
-          <i class="ri-calendar-line"></i> Current month
+          <i class="ri-calendar-line"></i> Offers & coupons
         </div>
       </div>
     </div>
@@ -128,7 +157,39 @@
         <h2 class="stat-title">Average Order Value</h2>
         <p class="stat-value" id="avgOrderValue"><%= summaryStats.avgOrderValue %></p>
         <div class="text-muted small">
-          <i class="ri-calendar-line"></i> Current month
+          <i class="ri-calendar-line"></i> Successful orders
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <div class="stat-card">
+        <div class="icon sales">
+          <i class="ri-money-dollar-circle-line"></i>
+        </div>
+        <h2 class="stat-title">Net Revenue</h2>
+        <p class="stat-value text-success" id="netRevenue"><%= summaryStats.netRevenue %></p>
+        <div class="text-muted small">
+          <i class="ri-information-line"></i> Sales - Returns
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <div class="stat-card">
+        <div class="icon orders">
+          <i class="ri-pie-chart-line"></i>
+        </div>
+        <h2 class="stat-title">Success Rate</h2>
+        <p class="stat-value text-info" id="successRate">
+          <% 
+            const totalAllOrders = summaryStats.totalSalesRaw + summaryStats.totalCancelledOrdersRaw + summaryStats.totalReturnedOrdersRaw;
+            const successRate = totalAllOrders > 0 ? ((summaryStats.totalSalesRaw / totalAllOrders) * 100).toFixed(1) : 0;
+          %>
+          <%= successRate %>%
+        </p>
+        <div class="text-muted small">
+          <i class="ri-check-line"></i> Order completion
         </div>
       </div>
     </div>
@@ -173,10 +234,12 @@
                 <th>Date</th>
                 <th>Order ID</th>
                 <th>Customer</th>
+                <th>Type</th>
                 <th class="d-none-mobile">Items</th>
                 <th>Amount</th>
                 <th class="d-none-mobile">Discount</th>
                 <th class="d-none-mobile">Coupon</th>
+                <th class="d-none-mobile">Refund</th>
                 <th class="d-none d-lg-table-cell">Payment</th>
                 <th>Status</th>
               </tr>
@@ -184,7 +247,7 @@
             <tbody id="salesTableBody">
               <% if (salesTableData.orders.length > 0) { %>
                 <% salesTableData.orders.forEach(order => { %>
-                  <tr>
+                  <tr class="<%= order.orderType === 'cancelled' ? 'table-danger' : order.orderType === 'returned' ? 'table-warning' : '' %>">
                     <td>
                       <div><%= order.date %></div>
                       <div class="small text-muted d-md-none">Items: <%= order.totalItems %></div>
@@ -200,17 +263,45 @@
                         <% if (order.couponCode !== '-') { %>| <%= order.couponCode %><% } %>
                       </div>
                     </td>
-                    <td class="d-none-mobile"><%= order.totalItems %></td>
+                    <td>
+                      <span class="badge <%= order.orderType === 'successful' ? 'bg-success' : order.orderType === 'cancelled' ? 'bg-danger' : 'bg-warning' %>">
+                        <%= order.orderType.charAt(0).toUpperCase() + order.orderType.slice(1) %>
+                      </span>
+                      <% if (order.additionalInfo) { %>
+                        <div class="small text-muted mt-1"><%= order.additionalInfo %></div>
+                      <% } %>
+                    </td>
+                    <td class="d-none-mobile">
+                      <%= order.totalItems %>
+                      <% if (order.cancelledItems > 0 || order.returnedItems > 0) { %>
+                        <div class="small text-muted">
+                          <% if (order.cancelledItems > 0) { %>C: <%= order.cancelledItems %><% } %>
+                          <% if (order.returnedItems > 0) { %>R: <%= order.returnedItems %><% } %>
+                        </div>
+                      <% } %>
+                    </td>
                     <td><%= order.netAmount %></td>
                     <td class="d-none-mobile"><%= order.discount %></td>
                     <td class="d-none-mobile"><%= order.couponCode %></td>
-                    <td class="d-none d-lg-table-cell"><%= order.paymentMethod %></td>
+                    <td class="d-none-mobile">
+                      <% if (order.refundAmount !== '-') { %>
+                        <span class="text-danger"><%= order.refundAmount %></span>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                    <td class="d-none d-lg-table-cell">
+                      <%= order.paymentMethod %>
+                      <% if (order.paymentStatus && order.paymentStatus !== 'Paid') { %>
+                        <div class="small text-muted"><%= order.paymentStatus %></div>
+                      <% } %>
+                    </td>
                     <td><%- order.status %></td>
                   </tr>
                 <% }); %>
               <% } else { %>
                 <tr>
-                  <td colspan="10" class="text-center text-muted py-4">
+                  <td colspan="11" class="text-center text-muted py-4">
                     <i class="ri-inbox-line fs-1 d-block mb-2"></i>
                     No sales data found for the selected period
                   </td>
@@ -299,13 +390,41 @@ const salesTrendChart = new Chart(ctx, {
         pointHoverRadius: 7
       },
       {
-        label: 'Discounts',
-        data: salesTrendData.discounts,
-        backgroundColor: 'rgba(255, 193, 7, 0.1)',
-        borderColor: '#FFC107',
+        label: 'Cancelled Sales',
+        data: salesTrendData.cancelledSales,
+        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+        borderColor: '#dc3545',
         borderWidth: 2,
         tension: 0.4,
-        pointBackgroundColor: '#FFC107',
+        pointBackgroundColor: '#dc3545',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderDash: [5, 5]
+      },
+      {
+        label: 'Returned Sales',
+        data: salesTrendData.returnedSales,
+        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+        borderColor: '#ffc107',
+        borderWidth: 2,
+        tension: 0.4,
+        pointBackgroundColor: '#ffc107',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderDash: [10, 5]
+      },
+      {
+        label: 'Discounts',
+        data: salesTrendData.discounts,
+        backgroundColor: 'rgba(108, 117, 125, 0.1)',
+        borderColor: '#6c757d',
+        borderWidth: 2,
+        tension: 0.4,
+        pointBackgroundColor: '#6c757d',
         pointBorderColor: '#fff',
         pointBorderWidth: 2,
         pointRadius: 4,

@@ -388,7 +388,7 @@ const sendContactEmail = async (contactData, type = "confirmation") => {
     const mailOptions = {
       from: '"BookHaven - Your Bookstore" <noreply@BookHaven.com>',
       to: contactData.email,
-      subject: "✅ Thank you for contacting BookHaven - We'll get back to you soon!",
+      subject: " Thank you for contacting BookHaven - We'll get back to you soon!",
       html: confirmationTemplate,
       text: `Hello ${contactData.name}, Thank you for contacting BookHaven! We've received your message about "${getSubjectText(contactData.subject)}" and will get back to you within 24 hours.`,
     };

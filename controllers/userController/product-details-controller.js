@@ -3,6 +3,7 @@ const Category = require("../../models/categorySchema");
 const Cart = require("../../models/cartSchema");
 const Wishlist = require("../../models/wishlistSchema");
 const { getActiveOfferForProduct, calculateDiscount } = require("../../utils/offer-helper");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const productDetails = async (req, res) => {
   try {
@@ -117,4 +118,31 @@ const productDetails = async (req, res) => {
   }
 };
 
-module.exports = { productDetails };
+// Get current stock for a product (for real-time updates)
+const getProductStock = async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const product = await Product.findById(productId).select('stock isListed isDeleted');
+    
+    if (!product || !product.isListed || product.isDeleted) {
+      return res.status(HttpStatus.NOT_FOUND).json({
+        success: false,
+        message: "Product not found or unavailable"
+      });
+    }
+
+    res.json({
+      success: true,
+      stock: product.stock,
+      isAvailable: product.stock > 0
+    });
+  } catch (error) {
+    console.error("Error fetching product stock:", error);
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+module.exports = { productDetails, getProductStock };

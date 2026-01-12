@@ -1,4 +1,5 @@
 const User = require("../models/userSchema");
+const { HttpStatus } = require("../helpers/status-code");
 
 const userMiddleware = async (req, res, next) => {
   res.locals.user = null;
@@ -55,7 +56,7 @@ const userMiddleware = async (req, res, next) => {
 
         const wantsJSON = req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest' || (req.headers.accept && req.headers.accept.includes('application/json'));
         if (wantsJSON) {
-          return res.status(403).json({ success: false, requiresAuth: true, message: 'Your account is blocked. You have been logged out.' });
+          return res.status(HttpStatus.FORBIDDEN).json({ success: false, requiresAuth: true, message: 'Your account is blocked. You have been logged out.' });
         }
         return res.redirect('/login?error=blocked');
       }

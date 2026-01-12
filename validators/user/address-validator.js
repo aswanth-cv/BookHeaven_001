@@ -1,5 +1,5 @@
 const { createValidationMiddleware, validateName, validatePhone, validateText, VALIDATION_PATTERNS, VALIDATION_RULES } = require('../../helpers/validation-helper');
-
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 const INDIAN_STATES = [
@@ -77,7 +77,7 @@ const validateState = (req, res, next) => {
     );
     
     if (!normalized) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: 'Please select a valid Indian state',
         errors: ['Invalid state selected']
@@ -89,7 +89,7 @@ const validateState = (req, res, next) => {
     next();
   } catch (error) {
     console.error('State validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -102,7 +102,7 @@ const validateAddressAuth = (req, res, next) => {
     const userId = req.session.user_id || req.user?._id;
     
     if (!userId) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: 'Please login to manage addresses'
       });
@@ -112,7 +112,7 @@ const validateAddressAuth = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Address auth validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -145,7 +145,7 @@ const validateAddressOwnership = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Address ownership validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });
@@ -161,7 +161,7 @@ const validatePincodeDetails = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Pincode validation error:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Internal server error'
     });

@@ -1,4 +1,8 @@
 
+const { HttpStatus } = require("../../helpers/status-code");
+
+
+
 const logout = async (req, res) => {
   try {
     if (typeof req.logout === 'function') {
@@ -28,7 +32,7 @@ const logout = async (req, res) => {
     req.session.save((err) => {
       if (err) {
         console.error("Error saving session after user logout:", err);
-        return res.status(500).send("Logout failed");
+        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Logout failed");
       }
       
       res.header('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
@@ -39,7 +43,7 @@ const logout = async (req, res) => {
     });
   } catch (error) {
     console.error("Logout error:", error);
-    res.status(500).send("Internal Server Error");
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Internal Server Error");
   }
 };
 

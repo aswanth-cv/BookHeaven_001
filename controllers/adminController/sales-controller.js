@@ -1,5 +1,6 @@
 const Order = require('../../models/orderSchema');
 const XLSX = require('xlsx');
+const { HttpStatus } = require("../../helpers/status-code");
 
 const getSales = async (req, res) => {
   try {
@@ -51,13 +52,14 @@ const getSales = async (req, res) => {
     });
   } catch (error) {
     console.log('Error in getSales:', error);
-    res.status(500).render('error', { message: 'Internal server error' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).render('error', { message: 'Internal server error' });
   }
 };
 
 const calculateSummaryStats = async (startDate, endDate) => {
   try {
-    const result = await Order.aggregate([
+    // Get delivered/successful orders stats
+    const successfulOrdersResult = await Order.aggregate([
       {
         $match: {
           createdAt: { $gte: startDate, $lte: endDate },
@@ -73,40 +75,101 @@ const calculateSummaryStats = async (startDate, endDate) => {
           totalOfferDiscount: { $sum: { $ifNull: ['$discount', 0] } },
           totalCouponDiscount: { $sum: { $ifNull: ['$couponDiscount', 0] } }
         }
+      }
+    ]);
+
+    // Get cancelled orders stats
+    const cancelledOrdersResult = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          $or: [
+            { orderStatus: { $in: ['Cancelled', 'Partially Cancelled'] } },
+            { 'items.status': 'Cancelled' }
+          ],
+          isDeleted: false
+        }
       },
       {
-        $addFields: {
-          totalDiscounts: {
-            $add: ['$totalOfferDiscount', '$totalCouponDiscount']
-          },
-          avgOrderValue: {
-            $cond: [
-              { $gt: ['$totalOrders', 0] },
-              { $divide: ['$totalSales', '$totalOrders'] },
-              0
-            ]
-          }
+        $group: {
+          _id: null,
+          totalCancelledOrders: { $sum: 1 },
+          totalCancelledValue: { $sum: { $ifNull: ['$total', 0] } }
         }
       }
     ]);
 
-    const stats = result[0] || {
+    // Get returned orders stats
+    const returnedOrdersResult = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          $or: [
+            { orderStatus: { $in: ['Returned', 'Partially Returned'] } },
+            { 'items.status': 'Returned' }
+          ],
+          isDeleted: false
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalReturnedOrders: { $sum: 1 },
+          totalReturnedValue: { $sum: { $ifNull: ['$total', 0] } }
+        }
+      }
+    ]);
+
+    const successfulStats = successfulOrdersResult[0] || {
       totalOrders: 0,
       totalSales: 0,
-      totalDiscounts: 0,
-      avgOrderValue: 0
+      totalOfferDiscount: 0,
+      totalCouponDiscount: 0
     };
 
-    return {
-      totalSales: formatCurrency(stats.totalSales),
-      totalOrders: stats.totalOrders.toLocaleString(),
-      totalDiscounts: formatCurrency(stats.totalDiscounts),
-      avgOrderValue: formatCurrency(stats.avgOrderValue),
+    const cancelledStats = cancelledOrdersResult[0] || {
+      totalCancelledOrders: 0,
+      totalCancelledValue: 0
+    };
 
-      // raw values (useful for charts)
-      totalSalesRaw: stats.totalSales,
-      totalDiscountsRaw: stats.totalDiscounts,
-      avgOrderValueRaw: stats.avgOrderValue
+    const returnedStats = returnedOrdersResult[0] || {
+      totalReturnedOrders: 0,
+      totalReturnedValue: 0
+    };
+
+    const totalDiscounts = successfulStats.totalOfferDiscount + successfulStats.totalCouponDiscount;
+    const avgOrderValue = successfulStats.totalOrders > 0 ? successfulStats.totalSales / successfulStats.totalOrders : 0;
+
+    // Calculate net revenue (successful sales - returned value)
+    const netRevenue = successfulStats.totalSales - returnedStats.totalReturnedValue;
+
+    return {
+      // Successful orders
+      totalSales: formatCurrency(successfulStats.totalSales),
+      totalOrders: successfulStats.totalOrders.toLocaleString(),
+      totalDiscounts: formatCurrency(totalDiscounts),
+      avgOrderValue: formatCurrency(avgOrderValue),
+
+      // Cancelled orders
+      totalCancelledOrders: cancelledStats.totalCancelledOrders.toLocaleString(),
+      totalCancelledValue: formatCurrency(cancelledStats.totalCancelledValue),
+
+      // Returned orders
+      totalReturnedOrders: returnedStats.totalReturnedOrders.toLocaleString(),
+      totalReturnedValue: formatCurrency(returnedStats.totalReturnedValue),
+
+      // Net revenue
+      netRevenue: formatCurrency(netRevenue),
+
+      // Raw values (useful for charts)
+      totalSalesRaw: successfulStats.totalSales,
+      totalDiscountsRaw: totalDiscounts,
+      avgOrderValueRaw: avgOrderValue,
+      totalCancelledOrdersRaw: cancelledStats.totalCancelledOrders,
+      totalCancelledValueRaw: cancelledStats.totalCancelledValue,
+      totalReturnedOrdersRaw: returnedStats.totalReturnedOrders,
+      totalReturnedValueRaw: returnedStats.totalReturnedValue,
+      netRevenueRaw: netRevenue
     };
 
   } catch (error) {
@@ -116,9 +179,19 @@ const calculateSummaryStats = async (startDate, endDate) => {
       totalOrders: '0',
       totalDiscounts: '₹0',
       avgOrderValue: '₹0',
+      totalCancelledOrders: '0',
+      totalCancelledValue: '₹0',
+      totalReturnedOrders: '0',
+      totalReturnedValue: '₹0',
+      netRevenue: '₹0',
       totalSalesRaw: 0,
       totalDiscountsRaw: 0,
-      avgOrderValueRaw: 0
+      avgOrderValueRaw: 0,
+      totalCancelledOrdersRaw: 0,
+      totalCancelledValueRaw: 0,
+      totalReturnedOrdersRaw: 0,
+      totalReturnedValueRaw: 0,
+      netRevenueRaw: 0
     };
   }
 };
@@ -213,6 +286,8 @@ const calculateSalesTrend = async (startDate, endDate) => {
     const grossSales = [];
     const netSales = [];
     const discounts = [];
+    const cancelledSales = [];
+    const returnedSales = [];
 
     const diffTime = Math.abs(endDate - startDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -229,9 +304,30 @@ const calculateSalesTrend = async (startDate, endDate) => {
       if (weekStart > endDate) break;
       if (weekEnd > endDate) weekEnd.setTime(endDate.getTime());
 
+      // Get successful orders
       const weekOrders = await Order.find({
         createdAt: { $gte: weekStart, $lte: weekEnd },
         orderStatus: { $in: ['Delivered', 'Shipped', 'Processing'] },
+        isDeleted: false
+      });
+
+      // Get cancelled orders
+      const weekCancelledOrders = await Order.find({
+        createdAt: { $gte: weekStart, $lte: weekEnd },
+        $or: [
+          { orderStatus: { $in: ['Cancelled', 'Partially Cancelled'] } },
+          { 'items.status': 'Cancelled' }
+        ],
+        isDeleted: false
+      });
+
+      // Get returned orders
+      const weekReturnedOrders = await Order.find({
+        createdAt: { $gte: weekStart, $lte: weekEnd },
+        $or: [
+          { orderStatus: { $in: ['Returned', 'Partially Returned'] } },
+          { 'items.status': 'Returned' }
+        ],
         isDeleted: false
       });
 
@@ -246,19 +342,24 @@ const calculateSalesTrend = async (startDate, endDate) => {
         return sum + (order.discount || 0) + (order.couponDiscount || 0);
       }, 0);
 
+      const weekCancelledValue = weekCancelledOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+      const weekReturnedValue = weekReturnedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+
       labels.push(`Week ${week + 1}`);
       grossSales.push(Math.round(weekGrossSales));
       netSales.push(Math.round(weekNetSales));
       discounts.push(Math.round(weekDiscounts));
+      cancelledSales.push(Math.round(weekCancelledValue));
+      returnedSales.push(Math.round(weekReturnedValue));
     }
-
-   
 
     return {
       labels,
       grossSales,
       netSales,
-      discounts
+      discounts,
+      cancelledSales,
+      returnedSales
     };
   } catch (error) {
     console.error('Error calculating sales trend:', error);
@@ -266,7 +367,9 @@ const calculateSalesTrend = async (startDate, endDate) => {
       labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
       grossSales: [0, 0, 0, 0, 0],
       netSales: [0, 0, 0, 0, 0],
-      discounts: [0, 0, 0, 0, 0]
+      discounts: [0, 0, 0, 0, 0],
+      cancelledSales: [0, 0, 0, 0, 0],
+      returnedSales: [0, 0, 0, 0, 0]
     };
   }
 };
@@ -275,9 +378,16 @@ const getSalesTableData = async (startDate, endDate, page, limit) => {
   try {
     const skip = (page - 1) * limit;
 
+    // Get all orders (successful, cancelled, and returned)
     const orders = await Order.find({
       createdAt: { $gte: startDate, $lte: endDate },
-      orderStatus: { $in: ['Delivered', 'Shipped', 'Processing', 'Placed'] },
+      orderStatus: { 
+        $in: [
+          'Delivered', 'Shipped', 'Processing', 'Placed',
+          'Cancelled', 'Partially Cancelled',
+          'Returned', 'Partially Returned', 'Return Requested'
+        ] 
+      },
       isDeleted: false
     })
     .populate('user', 'fullName email')
@@ -285,11 +395,15 @@ const getSalesTableData = async (startDate, endDate, page, limit) => {
     .skip(skip)
     .limit(limit);
 
-
-
     const totalOrders = await Order.countDocuments({
       createdAt: { $gte: startDate, $lte: endDate },
-      orderStatus: { $in: ['Delivered', 'Shipped', 'Processing', 'Placed'] },
+      orderStatus: { 
+        $in: [
+          'Delivered', 'Shipped', 'Processing', 'Placed',
+          'Cancelled', 'Partially Cancelled',
+          'Returned', 'Partially Returned', 'Return Requested'
+        ] 
+      },
       isDeleted: false
     });
 
@@ -299,22 +413,67 @@ const getSalesTableData = async (startDate, endDate, page, limit) => {
 
       const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
+      // Count cancelled and returned items
+      const cancelledItems = order.items.filter(item => item.status === 'Cancelled').length;
+      const returnedItems = order.items.filter(item => item.status === 'Returned').length;
+
       let statusBadge = '';
+      let orderType = 'successful'; // successful, cancelled, returned
+
       switch (order.orderStatus) {
         case 'Delivered':
           statusBadge = '<span class="badge bg-success">Delivered</span>';
+          orderType = 'successful';
           break;
         case 'Shipped':
           statusBadge = '<span class="badge bg-info">Shipped</span>';
+          orderType = 'successful';
           break;
         case 'Processing':
           statusBadge = '<span class="badge bg-warning text-dark">Processing</span>';
+          orderType = 'successful';
           break;
         case 'Placed':
           statusBadge = '<span class="badge bg-primary">Placed</span>';
+          orderType = 'successful';
+          break;
+        case 'Cancelled':
+          statusBadge = '<span class="badge bg-danger">Cancelled</span>';
+          orderType = 'cancelled';
+          break;
+        case 'Partially Cancelled':
+          statusBadge = '<span class="badge bg-warning">Partially Cancelled</span>';
+          orderType = 'cancelled';
+          break;
+        case 'Returned':
+          statusBadge = '<span class="badge bg-secondary">Returned</span>';
+          orderType = 'returned';
+          break;
+        case 'Partially Returned':
+          statusBadge = '<span class="badge bg-info">Partially Returned</span>';
+          orderType = 'returned';
+          break;
+        case 'Return Requested':
+          statusBadge = '<span class="badge bg-warning">Return Requested</span>';
+          orderType = 'returned';
           break;
         default:
           statusBadge = '<span class="badge bg-secondary">Unknown</span>';
+          orderType = 'successful';
+      }
+
+      // Add additional info for cancelled/returned orders
+      let additionalInfo = '';
+      if (order.orderStatus.includes('Cancelled') && order.cancellationReason) {
+        additionalInfo = `Reason: ${order.cancellationReason}`;
+      } else if (order.orderStatus.includes('Return') && order.returnReason) {
+        additionalInfo = `Reason: ${order.returnReason}`;
+      }
+
+      // Calculate refund amount for returned orders
+      let refundAmount = 0;
+      if (orderType === 'returned' && (order.paymentStatus === 'Refunded' || order.paymentStatus === 'Partially Refunded')) {
+        refundAmount = order.total; // Simplified - in real scenario, calculate based on returned items
       }
 
       return {
@@ -326,15 +485,22 @@ const getSalesTableData = async (startDate, endDate, page, limit) => {
         orderNumber: order.orderNumber,
         customerName: order.user?.fullName || 'Guest',
         totalItems,
+        cancelledItems,
+        returnedItems,
         grossAmount: formatCurrency(grossAmount),
         discount: formatCurrency(totalDiscount),
         couponCode: order.couponCode || '-',
         netAmount: formatCurrency(order.total),
+        refundAmount: refundAmount > 0 ? formatCurrency(refundAmount) : '-',
         paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
         status: statusBadge,
+        orderType,
+        additionalInfo,
         grossAmountRaw: grossAmount,
         discountRaw: totalDiscount,
-        netAmountRaw: order.total
+        netAmountRaw: order.total,
+        refundAmountRaw: refundAmount
       };
     });
 
@@ -403,13 +569,19 @@ const exportToExcel = async (req, res) => {
       'Date': order.date,
       'Order Number': order.orderNumber,
       'Customer Name': order.customerName,
+      'Order Type': order.orderType.charAt(0).toUpperCase() + order.orderType.slice(1),
       'Total Items': order.totalItems,
+      'Cancelled Items': order.cancelledItems || 0,
+      'Returned Items': order.returnedItems || 0,
       'Gross Amount': order.grossAmountRaw,
       'Discount': order.discountRaw,
       'Coupon Code': order.couponCode,
       'Net Amount': order.netAmountRaw,
+      'Refund Amount': order.refundAmountRaw || 0,
       'Payment Method': order.paymentMethod,
-      'Status': order.status.replace(/<[^>]*>/g, '') 
+      'Payment Status': order.paymentStatus,
+      'Status': order.status.replace(/<[^>]*>/g, ''),
+      'Additional Info': order.additionalInfo || ''
     }));
 
     const workbook = XLSX.utils.book_new();
@@ -426,7 +598,7 @@ const exportToExcel = async (req, res) => {
     res.send(buffer);
   } catch (error) {
     console.error('Error exporting to Excel:', error);
-    res.status(500).json({ error: 'Failed to export to Excel' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Failed to export to Excel' });
   }
 };
 
@@ -457,7 +629,7 @@ const exportToPDF = async (req, res) => {
     res.send(htmlContent);
   } catch (error) {
     console.error('Error exporting to PDF:', error);
-    res.status(500).json({ error: 'Failed to export to PDF' });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Failed to export to PDF' });
   }
 };
 
@@ -585,6 +757,26 @@ const generatePDFHTML = (salesData, summaryStats, startDate, endDate) => {
           <div class="summary-value">${summaryStats.avgOrderValue}</div>
           <div>Avg Order Value</div>
         </div>
+        <div class="summary-item">
+          <div class="summary-value">${summaryStats.totalCancelledOrders}</div>
+          <div>Cancelled Orders</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${summaryStats.totalCancelledValue}</div>
+          <div>Cancelled Value</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${summaryStats.totalReturnedOrders}</div>
+          <div>Returned Orders</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${summaryStats.totalReturnedValue}</div>
+          <div>Returned Value</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-value">${summaryStats.netRevenue}</div>
+          <div>Net Revenue</div>
+        </div>
       </div>
 
       <table>
@@ -593,11 +785,15 @@ const generatePDFHTML = (salesData, summaryStats, startDate, endDate) => {
             <th>Date</th>
             <th>Order Number</th>
             <th>Customer</th>
+            <th>Type</th>
             <th>Items</th>
+            <th>Cancelled</th>
+            <th>Returned</th>
             <th>Gross Amount</th>
             <th>Discount</th>
             <th>Coupon</th>
             <th>Net Amount</th>
+            <th>Refund</th>
             <th>Payment</th>
             <th>Status</th>
           </tr>
@@ -608,11 +804,15 @@ const generatePDFHTML = (salesData, summaryStats, startDate, endDate) => {
               <td>${order.date}</td>
               <td>${order.orderNumber}</td>
               <td>${order.customerName}</td>
+              <td>${order.orderType.charAt(0).toUpperCase() + order.orderType.slice(1)}</td>
               <td>${order.totalItems}</td>
+              <td>${order.cancelledItems || 0}</td>
+              <td>${order.returnedItems || 0}</td>
               <td>${order.grossAmount}</td>
               <td>${order.discount}</td>
               <td>${order.couponCode}</td>
               <td>${order.netAmount}</td>
+              <td>${order.refundAmount}</td>
               <td>${order.paymentMethod}</td>
               <td>${order.status.replace(/<[^>]*>/g, '')}</td>
             </tr>

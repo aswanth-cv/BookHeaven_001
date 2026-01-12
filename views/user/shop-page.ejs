@@ -587,7 +587,31 @@
               if (window.Swal) Swal.fire({ icon: 'success', title: 'Added to cart', timer: 1200, showConfirmButton: false });
             } else {
               const msg = (resp.data && resp.data.message) || 'Failed to add to cart';
-              if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: msg });
+              
+              // Special handling for different error types
+              if (resp.data && resp.data.isProductBlocked) {
+                if (window.Swal) {
+                  Swal.fire({ 
+                    icon: 'warning', 
+                    title: 'Product Unavailable', 
+                    text: msg,
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#3085d6'
+                  });
+                }
+              } else if (resp.data && resp.data.isStockInsufficient) {
+                if (window.Swal) {
+                  Swal.fire({ 
+                    icon: 'info', 
+                    title: 'Stock Updated', 
+                    text: msg,
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#3085d6'
+                  });
+                }
+              } else {
+                if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: msg });
+              }
             }
           } catch (err) {
             if (window.Swal) Swal.fire({ icon: 'error', title: 'Error', text: 'Network error' });

@@ -6,6 +6,8 @@ const Product = require("../../models/productSchema");
 const Coupon = require("../../models/couponSchema");
 const razorpay = require("../../config/razorpay");
 const Wallet =require("../../models/walletSchema");
+const { HttpStatus } = require("../../helpers/status-code");
+const { ErrorMessages } = require("../../helpers/error-messages");
 const crypto = require('crypto');
 const { getActiveOfferForProduct,
   calculateDiscount,
@@ -27,7 +29,7 @@ const validateCartStock = async (cartItems) => {
         productTitle: item.product.title,
         requestedQuantity: item.quantity,
         availableStock: 0,
-        issue: 'Product not found'
+        issue: ErrorMessages.PRODUCT.NOT_FOUND
       });
       continue;
     }
@@ -38,7 +40,7 @@ const validateCartStock = async (cartItems) => {
         productTitle: product.title,
         requestedQuantity: item.quantity,
         availableStock: 0,
-        issue: 'Product no longer available'
+        issue: ErrorMessages.PRODUCT.UNAVAILABLE
       });
       continue;
     }
@@ -49,7 +51,7 @@ const validateCartStock = async (cartItems) => {
         productTitle: product.title,
         requestedQuantity: item.quantity,
         availableStock: product.stock,
-        issue: 'Insufficient stock'
+        issue: ErrorMessages.CART.STOCK_INSUFFICIENT
       });
     }
   }
@@ -92,7 +94,7 @@ const getCheckout = async (req, res) => {
 
     // Check if cart exists and has items
     if (!cart || !cart.items || cart.items.length === 0) {
-      req.session.errorMessage = "Your cart is empty. Please add items before checkout.";
+      req.session.errorMessage = ErrorMessages.CART.EMPTY;
       return res.redirect("/cart");
     }
 
@@ -105,7 +107,7 @@ const getCheckout = async (req, res) => {
     );
 
     if (cartItems.length === 0) {
-      req.session.errorMessage = "No valid items in cart. Some items may be unavailable.";
+      req.session.errorMessage = ErrorMessages.CART.PRODUCT_UNAVAILABLE;
       return res.redirect("/cart");
     }
 
@@ -116,7 +118,7 @@ const getCheckout = async (req, res) => {
       // Create detailed error message
       let errorMessage = "Stock has been updated. Please adjust your cart quantities:\n";
       stockIssues.forEach(issue => {
-        if (issue.issue === 'Insufficient stock') {
+        if (issue.issue === ErrorMessages.CART.STOCK_INSUFFICIENT) {
           errorMessage += `• ${issue.productTitle}: You have ${issue.requestedQuantity} in cart, but only ${issue.availableStock} available\n`;
         } else {
           errorMessage += `• ${issue.productTitle}: ${issue.issue}\n`;
@@ -132,7 +134,7 @@ const getCheckout = async (req, res) => {
     if (validCartItems.length !== cartItems.length) {
       cart.items = validCartItems;
       await cart.save();
-      req.session.errorMessage = "Some items were removed from your cart due to insufficient stock.";
+      req.session.errorMessage = ErrorMessages.CART.UPDATE_FAILED;
       return res.redirect("/cart");
     }
 
@@ -262,7 +264,7 @@ const getCheckout = async (req, res) => {
     cartCount = validCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
     if (addresses.length === 0) {
-      req.session.errorMessage = "Please add a delivery address before proceeding to checkout.";
+      req.session.errorMessage = ErrorMessages.ADDRESS.NOT_FOUND;
       req.session.redirectToCheckout = true;
       return res.redirect("/address?returnTo=checkout");
     }
@@ -310,7 +312,7 @@ const getCheckout = async (req, res) => {
 
   } catch (error) {
     console.error("Error in rendering checkout page:", error);
-    req.session.errorMessage = "Something went wrong. Please try again.";
+    req.session.errorMessage = ErrorMessages.GENERAL.SOMETHING_WENT_WRONG;
     return res.redirect("/cart");
   }
 };
@@ -365,7 +367,10 @@ async function getAvailableCouponsForUser(userId, orderAmount) {
 const validateStock = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({ success: false, message: "Please log in" });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ 
+        success: false, 
+        message: ErrorMessages.AUTH.LOGIN_REQUIRED 
+      });
     }
 
     const userId = req.session.user_id;
@@ -388,7 +393,7 @@ const validateStock = async (req, res) => {
         success: true,
         valid: false,
         stockIssues: stockIssues,
-        message: "Some items in your cart have stock issues"
+        message: ErrorMessages.CART.STOCK_INSUFFICIENT
       });
     }
 
@@ -400,9 +405,9 @@ const validateStock = async (req, res) => {
 
   } catch (error) {
     console.error('Error validating stock:', error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: "Error validating stock"
+      message: ErrorMessages.SERVER.INTERNAL_ERROR
     });
   }
 };
@@ -411,13 +416,19 @@ const addAddress = async (req, res) => {
   try {
     const userId = req.session.user_id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Please log in to add an address" });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ 
+        success: false, 
+        message: ErrorMessages.AUTH.LOGIN_REQUIRED 
+      });
     }
 
     const { fullName, phone, pincode, district, state, street, landmark, isDefault } = req.body;
 
     if (!fullName || !phone || !pincode || !district || !state || !street) {
-      return res.status(401).json({ success: false, message: "All required fields must be filled" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ 
+        success: false, 
+        message: ErrorMessages.ADDRESS.REQUIRED_FIELDS 
+      });
     }
 
     const newAddress = new Address({
@@ -438,14 +449,17 @@ const addAddress = async (req, res) => {
 
     await newAddress.save();
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       message: "Address added successfully",
       address: newAddress,
     });
   } catch (error) {
     console.error("Error adding address:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ 
+      success: false, 
+      message: ErrorMessages.ADDRESS.CREATE_FAILED 
+    });
   }
 };
 
@@ -644,19 +658,6 @@ const placeOrder = async (req, res) => {
     // Note: subtotal already has offers applied, so: subtotal - coupons + tax + delivery
     const total = Math.round((subtotal - couponDiscount + tax + deliveryCharge) * 100) / 100;
 
-    // Debug logging for wallet payments
-    console.log('🔍 Order Calculation Debug:', {
-      subtotal: subtotal, // Already discounted
-      offerDiscount: offerDiscount, // For display only
-      couponDiscount: couponDiscount,
-      subtotalAfterOffers: subtotalAfterOffers,
-      taxBase: subtotal - couponDiscount, // Correct tax base
-      tax: tax,
-      deliveryCharge: deliveryCharge,
-      total: total,
-      paymentMethod: paymentMethod,
-      note: 'subtotal is already discounted (after offers applied)'
-    });
 
     if (paymentMethod === "COD" && total > 1000) {
       throw new Error("Cash on Delivery is not available for orders above ₹1,000. Please choose an online payment method.");
@@ -752,17 +753,6 @@ const placeOrder = async (req, res) => {
 
     if (paymentMethod === "Wallet" && wallet) {
       try {
-        console.log('💳 Wallet Payment Debug:', {
-          walletBalanceBefore: wallet.balance,
-          totalToDeduct: total,
-          breakdown: {
-            subtotal: subtotal,
-            offerDiscount: offerDiscount,
-            couponDiscount: couponDiscount,
-            tax: tax,
-            deliveryCharge: deliveryCharge
-          }
-        });
         
         wallet.balance = Number(wallet.balance) - Number(total);
 
@@ -774,10 +764,6 @@ const placeOrder = async (req, res) => {
           date: new Date()
         });
 
-        console.log('💳 Wallet Payment Completed:', {
-          amountDeducted: Number(total),
-          walletBalanceAfter: wallet.balance
-        });
 
         await wallet.save();
       } catch (walletError) {
@@ -796,7 +782,7 @@ const placeOrder = async (req, res) => {
     // Clear cart
     await Cart.findOneAndUpdate({ user: userId }, { items: [] });
 
-    res.status(201).json({
+    res.status(HttpStatus.CREATED).json({
       success: true,
       message: paymentMethod === "Wallet" ? "Order placed and paid successfully from wallet" : "Order placed successfully",
       orderId: order._id,
@@ -882,49 +868,40 @@ const placeOrder = async (req, res) => {
 
 const createRazorpayOrder = async (req, res) => {
   try {
-    console.log("Creating Razorpay order - Start");
     
     const userId = req.session.user_id;
     if (!userId) {
-      console.log("No user ID in session");
-      return res.status(401).json({ success: false, message: "Please log in to place an order" });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: "Please log in to place an order" });
     }
 
     const { addressId } = req.body;
-    console.log("Address ID:", addressId);
 
     
     if (!addressId) {
-      console.log("No address ID provided");
-      return res.status(400).json({ success: false, message: "Address is required" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Address is required" });
     }
 
     
     const address = await Address.findById(addressId);
     if (!address || address.userId.toString() !== userId.toString()) {
-      console.log("Invalid address or unauthorized access");
-      return res.status(400).json({ success: false, message: "Invalid or unauthorized address" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Invalid or unauthorized address" });
     }
 
     
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || !cart.items.length) {
-      console.log("Cart is empty");
-      return res.status(400).json({ success: false, message: "Cart is empty" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Cart is empty" });
     }
 
     
     const cartItems = cart.items.filter((item) => item.product && item.product.isListed && !item.product.isDeleted);
 
     if (!cartItems.length) {
-      console.log("No valid items in cart");
-      return res.status(400).json({ success: false, message: "No valid items in cart" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "No valid items in cart" });
     }
 
-    console.log("Valid cart items:", cartItems.length);
 
     const orderNumber = generateOrderNumber();
-    console.log("Generated order number:", orderNumber);
 
     const orderItems = [];
     let originalSubtotal = 0;
@@ -1088,28 +1065,16 @@ const createRazorpayOrder = async (req, res) => {
 
     if (amountInPaise <= 0) {
       console.error("Invalid amount calculated:", amountInPaise);
-      return res.status(400).json({ success: false, message: "Invalid order amount calculated" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Invalid order amount calculated" });
     }
 
     if (amountInPaise < 100) {
       console.error("Amount too small for Razorpay:", amountInPaise);
-      return res.status(400).json({ success: false, message: "Order amount must be at least ₹1" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Order amount must be at least ₹1" });
     }
 
-    console.log("Environment variables check:", {
-      RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID ? "Present" : "Missing",
-      RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET ? "Present" : "Missing"
-    });
+   
 
-    console.log("Calculated totals:", {
-      checkoutSubtotal: checkoutSubtotal.toFixed(2),
-      checkoutOfferDiscount: checkoutOfferDiscount.toFixed(2),
-      couponDiscount: couponDiscount.toFixed(2),
-      deliveryCharge: deliveryCharge.toFixed(2),
-      checkoutTax: checkoutTax.toFixed(2),
-      finalCheckoutTotal: finalCheckoutTotal.toFixed(2),
-      amountInPaise
-    });
 
     const razorpayOrderData = {
       amount: amountInPaise,
@@ -1124,8 +1089,7 @@ const createRazorpayOrder = async (req, res) => {
       }
     };
 
-    console.log("Creating Razorpay order with data:", razorpayOrderData);
-    console.log("Razorpay instance:", razorpay ? "Available" : "Not available");
+   
 
     if (!razorpay) {
       throw new Error("Razorpay instance not available");
@@ -1133,9 +1097,8 @@ const createRazorpayOrder = async (req, res) => {
 
     const razorpayOrder = await razorpay.orders.create(razorpayOrderData);
     
-    console.log("Razorpay order created successfully:", razorpayOrder.id);
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       order: razorpayOrder,
       key: process.env.RAZORPAY_KEY_ID,
@@ -1158,7 +1121,7 @@ const createRazorpayOrder = async (req, res) => {
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
     console.error("Error stack:", error.stack);
-    res.status(500).json({ success: false, message: "Failed to create payment order", error: error.message });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Failed to create payment order", error: error.message });
   }
 };
 
@@ -1176,12 +1139,12 @@ const verifyPayment = async (req, res) => {
     const isAuthentic = expectedSignature === razorpay_signature;
 
     if (!isAuthentic) {
-      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Invalid payment signature" });
     }
 
     const pendingOrder = req.session.pendingOrder;
     if (!pendingOrder) {
-      return res.status(400).json({ success: false, message: "No pending order found" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "No pending order found" });
     }
 
     const userId = req.session.user_id;
@@ -1283,7 +1246,7 @@ const verifyPayment = async (req, res) => {
     delete req.session.pendingOrder;
     delete req.session.appliedCoupon;
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       message: "Payment successful",
       orderId: order._id,
@@ -1291,7 +1254,7 @@ const verifyPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Error verifying payment:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -1301,15 +1264,14 @@ const handlePaymentFailure = async (req, res) => {
   try {
     const { orderId, error } = req.body;
     
-    console.log("Payment failed for order:", orderId, "Error:", error);
     
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       message: "Payment failure handled"
     });
   } catch (error) {
     console.error("Error handling payment failure:", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Failed to handle payment failure"
     });
@@ -1341,28 +1303,28 @@ const applyCoupon = async (req,res)=>{
     const userId = req.session.user_id;
 
     if(!userId){
-      return res.status(400).json({success:false , message:"Please log in to apply a coupon"})
+      return res.status(HttpStatus.BAD_REQUEST).json({success:false , message:"Please log in to apply a coupon"})
     }
   
     const coupon = await Coupon.findOne({code:couponCode.toUpperCase()});
 
     if(!coupon){
-      return res.status(404).json({success : false,message:"Invalid coupon code"})
+      return res.status(HttpStatus.NOT_FOUND).json({success : false,message:"Invalid coupon code"})
     }
 
     if(!coupon.isActive){
-      return res.status(404).json({success:false,message:"This coupon is Inactive"});
+      return res.status(HttpStatus.NOT_FOUND).json({success:false,message:"This coupon is Inactive"});
     }
 
     const now = new Date();
     if (now < coupon.startDate || now > coupon.expiryDate) {
-      return res.status(400).json({ success: false, message: "This coupon has expired or is not yet active" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "This coupon has expired or is not yet active" });
     }
 
     const cart = await Cart.findOne({user:userId}).populate("items.product");
 
     if(!cart || !cart.items.length){
-      return res.status(404).json({success : false , message : "Your cart is empty"});
+      return res.status(HttpStatus.NOT_FOUND).json({success : false , message : "Your cart is empty"});
     }
 
     const cartItems = cart.items.filter((item)=> item.product && item.product.isListed && !item.product.isDeleted)
@@ -1382,19 +1344,19 @@ const applyCoupon = async (req,res)=>{
     const subtotal = cartItems.reduce((sum, item) => sum + item.quantity * item.discountedPrice, 0);
 
     if (subtotal < coupon.minOrderAmount) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: `Minimum order amount of ₹${coupon.minOrderAmount} required for this coupon`,
       });
     }
 
     if (coupon.usageLimitGlobal && coupon.usedCount >= coupon.usageLimitGlobal) {
-      return res.status(400).json({ success: false, message: "This coupon has reached its usage limit" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "This coupon has reached its usage limit" });
     }
 
     const userUsage = coupon.usedBy.find((usage) => usage.userId.toString() === userId.toString());
     if (userUsage && userUsage.count >= coupon.usageLimitPerUser) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: "You have already used this coupon the maximum number of times"
       });
@@ -1426,7 +1388,7 @@ const applyCoupon = async (req,res)=>{
     const tax = (subtotal - discount) * 0.08;
     const total = subtotal - discount + tax + deliveryCharge;
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       message: "Coupon applied successfully",
       discount,
@@ -1446,7 +1408,7 @@ const applyCoupon = async (req,res)=>{
   } catch (error) {
     
     console.error("Error applying coupon:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Internal server error" });
 
   }
 }
@@ -1456,13 +1418,13 @@ const removeCoupon = async (req, res) => {
   try {
     delete req.session.appliedCoupon;
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       message: "Coupon removed successfully",
     });
   } catch (error) {
     console.error("Error removing coupon:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -1471,18 +1433,18 @@ const getCurrentCartTotal = async (req, res) => {
   try {
     const userId = req.session.user_id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Please log in" });
+      return res.status(HttpStatus.UNAUTHORIZED).json({ success: false, message: "Please log in" });
     }
 
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || !cart.items.length) {
-      return res.status(400).json({ success: false, message: "Cart is empty" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "Cart is empty" });
     }
 
     const cartItems = cart.items.filter((item) => item.product && item.product.isListed && !item.product.isDeleted);
 
     if (!cartItems.length) {
-      return res.status(400).json({ success: false, message: "No valid items in cart" });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "No valid items in cart" });
     }
 
     let subtotal = 0;
@@ -1529,7 +1491,7 @@ const getCurrentCartTotal = async (req, res) => {
     const wallet = await Wallet.findOne({ userId });
     const walletBalance = wallet ? wallet.balance : 0;
 
-    res.status(200).json({
+    res.status(HttpStatus.OK).json({
       success: true,
       data: {
         subtotal,
@@ -1546,7 +1508,7 @@ const getCurrentCartTotal = async (req, res) => {
 
   } catch (error) {
     console.error("Error getting current cart total:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Internal server error" });
   }
 };
 

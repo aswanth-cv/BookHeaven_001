@@ -1,4 +1,7 @@
 
+const { HttpStatus } = require("../../helpers/status-code");
+
+
 const validateBasicOtp = (otp) => {
   if (!otp) {
     return {
@@ -30,7 +33,7 @@ const basicOtpValidationMiddleware = (req, res, next) => {
   const validation = validateBasicOtp(otp);
   
   if (!validation.isValid) {
-    return res.status(400).json({
+    return res.status(HttpStatus.BAD_REQUEST).json({
       success: false,
       message: validation.message,
     });

@@ -2,6 +2,7 @@ const Order = require("../../models/orderSchema");
 const Product = require("../../models/productSchema");
 const { processReturnRefund } = require("../userController/walletController");
 const { calculateExactRefundAmount } = require("../../helpers/money-calculator");
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 const calculateEstimatedRefund = (order) => {
@@ -168,7 +169,7 @@ const getReturnRequestDetails = async (req, res) => {
       .lean();
 
     if (!order || order.isDeleted) {
-      return res.status(404).render('admin/page-404', {
+      return res.status(HttpStatus.NOT_FOUND).render('admin/page-404', {
         title: 'Return Request Not Found'
       });
     }
@@ -236,14 +237,14 @@ const processReturnRequest = async (req, res) => {
 
     const order = await Order.findById(orderId);
     if (!order || order.isDeleted) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(HttpStatus.NOT_FOUND).json({ success: false, message: 'Order not found' });
     }
 
     
     const returnRequestedItems = order.items.filter(item => item.status === 'Return Requested');
 
     if (returnRequestedItems.length === 0) {
-      return res.status(400).json({ success: false, message: 'No return requests found for this order' });
+      return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: 'No return requests found for this order' });
     }
 
     const preHasActiveItems = order.items.some(i => i.status === 'Active');
@@ -324,11 +325,11 @@ const processReturnRequest = async (req, res) => {
               refundProcessed = true;
             } else {
               console.error('Failed to process COD return refund');
-              return res.status(500).json({ success: false, message: 'Failed to process refund. Please try again.' });
+              return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to process refund. Please try again.' });
             }
           } catch (err) {
             console.error('Error in processReturnRefund:', err);
-            return res.status(500).json({ success: false, message: 'Refund processing error' });
+            return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Refund processing error' });
           }
         } else {
           refundProcessed = true;
@@ -339,11 +340,11 @@ const processReturnRequest = async (req, res) => {
           if (refundSuccess) refundProcessed = true;
           else {
             console.error('Failed to process online refund');
-            return res.status(500).json({ success: false, message: 'Failed to process refund. Please try again.' });
+            return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to process refund. Please try again.' });
           }
         } catch (err) {
           console.error('Error in processReturnRefund (online):', err);
-          return res.status(500).json({ success: false, message: 'Refund processing error' });
+          return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Refund processing error' });
         }
       }
 
@@ -369,7 +370,7 @@ const processReturnRequest = async (req, res) => {
 
   } catch (error) {
     console.error('Error processing return request:', error);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -380,7 +381,7 @@ const bulkProcessReturns = async (req, res) => {
     const { orderIds, action } = req.body; 
 
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(500).json({
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'No orders selected'
       });
@@ -483,7 +484,7 @@ const bulkProcessReturns = async (req, res) => {
 
   } catch (error) {
     console.error("Error in bulk process returns:", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Internal server error"
     });

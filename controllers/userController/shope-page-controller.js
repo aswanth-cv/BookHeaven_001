@@ -1,6 +1,7 @@
 const Product = require('../../models/productSchema');
 const Category = require('../../models/categorySchema');
 const { getActiveOfferForProduct, calculateDiscount } = require('../../utils/offer-helper');
+const { HttpStatus } = require("../../helpers/status-code");
 
 const shopPage = async (req, res) => {
   try {
@@ -132,7 +133,7 @@ const shopPage = async (req, res) => {
     });
   } catch (error) {
     console.log(`Error in rendering Shop Page: ${error}`);
-    res.status(500).send("Server Error");
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Server Error");
   }
 };
 

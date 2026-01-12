@@ -64,6 +64,7 @@ userRouter.get("/auth/google/callback", googleController.googleController);
 // Product routes
 userRouter.get('/shopPage', shopPageController.shopPage);
 userRouter.get('/products/:id', productDetailsController.productDetails);
+userRouter.get('/products/:id/stock', productDetailsController.getProductStock);
 
 
 

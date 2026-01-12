@@ -1,5 +1,6 @@
 const User = require("../../models/userSchema");
 const bcrypt = require("bcrypt");
+const { HttpStatus } = require("../../helpers/status-code");
 
 const getLogin = async (req, res) => {
   try {
@@ -7,7 +8,7 @@ const getLogin = async (req, res) => {
     res.render("login");
   } catch (error) {
     console.log(error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });
@@ -21,14 +22,14 @@ const postLogin = async (req, res) => {
     const existingUser = await User.findOne({ email });
 
     if (!existingUser) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Email Not found",
       });
     }
 
     if (existingUser.isBlocked) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: "Your account is blocked. Please contact support.",
       });
@@ -40,7 +41,7 @@ const postLogin = async (req, res) => {
     );
 
     if (!verifiedPassword) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: "Invalid Email or Password",
       });
@@ -52,20 +53,20 @@ const postLogin = async (req, res) => {
     req.session.save((err) => {
       if (err) {
         console.error("Session save error:", err);
-        return res.status(500).json({
+        return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
           success: false,
           message: "Session error",
         });
       }
 
-      return res.status(200).json({
+      return res.status(HttpStatus.OK).json({
         success: true,
         message: "Welcome to BookHaven",
       });
     });
   } catch (error) {
     console.log("Signin ERROR", error);
-    res.status(500).json({
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server Error",
     });

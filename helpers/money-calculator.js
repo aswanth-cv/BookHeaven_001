@@ -194,8 +194,7 @@ const calculateExactRefundAmount = (item, order) => {
       return Number(order.total.toFixed(2));
     }
     
-    // For multiple items, just return the item's final price (not proportional)
-    // This matches the business requirement of refunding only the item amount
+   
     if (item.priceBreakdown && item.priceBreakdown.finalPrice) {
       return Number(item.priceBreakdown.finalPrice.toFixed(2));
     }
@@ -208,7 +207,6 @@ const calculateExactRefundAmount = (item, order) => {
     return Number(baseAmount.toFixed(2));
   } catch (error) {
     console.error('Error calculating exact refund amount:', error.message);
-    // Fallback to basic calculation
     const baseAmount = (item.price || 0) * (item.quantity || 1);
     return Number(baseAmount.toFixed(2));
   }

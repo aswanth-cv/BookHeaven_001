@@ -3,6 +3,8 @@ const Cart = require("../../models/cartSchema");
 const Product = require("../../models/productSchema");
 const Wishlist = require("../../models/wishlistSchema");
 const { getActiveOfferForProduct, calculateDiscount } = require("../../utils/offer-helper");
+const { HttpStatus } = require("../../helpers/status-code");
+const { ErrorMessages } = require("../../helpers/error-messages");
 
 
 
@@ -127,7 +129,7 @@ const getCart = async (req, res) => {
     delete req.session.successMessage;
   } catch (error) {
     console.log("Error in rendering cart:", error);
-    res.status(500).send("Server Error");
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).send("Server Error");
   }
 };
 
@@ -135,7 +137,7 @@ const addToCart = async (req, res) => {
   try {
     if (!req.session.user_id) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({
           success: false,
           message: "Please log in to add items to your cart",
@@ -150,7 +152,7 @@ const addToCart = async (req, res) => {
 
     if (!product || !product.isListed || product.isDeleted) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Product not found or unavailable" });
     }
 
@@ -173,7 +175,7 @@ const addToCart = async (req, res) => {
 
     if (totalQuantity > MAX_QUANTITY_PER_PRODUCT) {
       const remainingAllowed = MAX_QUANTITY_PER_PRODUCT - existingQuantity;
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: remainingAllowed > 0
           ? `You can only add ${remainingAllowed} more of this item. Maximum ${MAX_QUANTITY_PER_PRODUCT} items allowed per product.`
@@ -183,11 +185,17 @@ const addToCart = async (req, res) => {
     }
 
     if (totalQuantity > product.stock) {
-      return res.status(401).json({
+      const availableStock = product.stock - existingQuantity;
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
-        message: `Cannot add ${quantity} more items. Only ${
-          product.stock - existingQuantity
-        } items left in stock.`,
+        message: availableStock > 0 
+          ? `Stock has been updated. Only ${availableStock} items available. Please adjust your quantity to continue.`
+          : `This product is currently out of stock. Please check back later.`,
+        isStockInsufficient: true,
+        availableStock: Math.max(0, availableStock),
+        requestedQuantity: parseInt(quantity),
+        currentStock: product.stock,
+        existingInCart: existingQuantity
       });
     }
 
@@ -239,7 +247,7 @@ const addToCart = async (req, res) => {
   } catch (error) {
     console.log("Error adding to cart:", error);
     res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Server error" });
   }
 };
@@ -248,7 +256,7 @@ const updateCartItem = async (req, res) => {
   try {
     if (!req.session.user_id) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({ success: false, message: "Please log in" });
     }
 
@@ -258,7 +266,7 @@ const updateCartItem = async (req, res) => {
     const cart = await Cart.findOne({ user: userId });
     if (!cart) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Cart not found" });
     }
 
@@ -267,21 +275,21 @@ const updateCartItem = async (req, res) => {
     );
     if (itemIndex === -1) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Item not found in cart" });
     }
 
     const product = await Product.findById(productId);
     if (!product || !product.isListed || product.isDeleted) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Product not found or unavailable" });
     }
 
     const MAX_QUANTITY_PER_PRODUCT = 5;
     if (quantity > MAX_QUANTITY_PER_PRODUCT) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({
           success: false,
           message: `Maximum quantity reached! You can only have up to ${MAX_QUANTITY_PER_PRODUCT} of this item in your cart.`,
@@ -291,10 +299,14 @@ const updateCartItem = async (req, res) => {
 
     if (quantity > product.stock) {
       return res
-        .status(401)
+        .status(HttpStatus.BAD_REQUEST)
         .json({
           success: false,
-          message: `Only ${product.stock} items in stock`,
+          message: `Stock has been updated. Only ${product.stock} items available. Please adjust your quantity to continue.`,
+          isStockInsufficient: true,
+          availableStock: product.stock,
+          requestedQuantity: quantity,
+          currentStock: product.stock
         });
     }
 
@@ -335,7 +347,7 @@ const updateCartItem = async (req, res) => {
   } catch (error) {
     console.log("Error updating cart item:", error);
     res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Server error" });
   }
 };
@@ -344,7 +356,7 @@ const removeCartItem = async (req, res) => {
   try {
     if (!req.session.user_id) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({ success: false, message: "Please log in" });
     }
 
@@ -354,7 +366,7 @@ const removeCartItem = async (req, res) => {
     const cart = await Cart.findOne({ user: userId });
     if (!cart) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Cart not found" });
     }
 
@@ -379,7 +391,7 @@ const removeCartItem = async (req, res) => {
   } catch (error) {
     console.log("Error removing cart item:", error);
     res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Server error" });
   }
 };
@@ -388,7 +400,7 @@ const clearCart = async (req, res) => {
   try {
     if (!req.session.user_id) {
       return res
-        .status(401)
+        .status(HttpStatus.UNAUTHORIZED)
         .json({ success: false, message: "Please log in" });
     }
 
@@ -404,7 +416,7 @@ const clearCart = async (req, res) => {
   } catch (error) {
     console.log("Error clearing cart:", error);
     res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Server error" });
   }
 };
@@ -412,7 +424,7 @@ const clearCart = async (req, res) => {
 const addFromWishlist = async (req, res) => {
   try {
     if (!req.session.user_id) {
-      return res.status(401).json({
+      return res.status(HttpStatus.UNAUTHORIZED).json({
         success: false,
         message: "Please log in to add items to your cart",
         requiresAuth: true,
@@ -426,14 +438,14 @@ const addFromWishlist = async (req, res) => {
 
     const product = await Product.findById(productId);
     if (!product || !product.isListed || product.isDeleted) {
-      return res.status(404).json({
+      return res.status(HttpStatus.NOT_FOUND).json({
         success: false,
         message: "Product not found or unavailable"
       });
     }
 
     if (product.stock === 0) {
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: "This product is currently out of stock",
         outOfStock: true
@@ -456,7 +468,7 @@ const addFromWishlist = async (req, res) => {
 
     if (totalQuantity > product.stock) {
       const available = product.stock - existingQuantity;
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: available > 0
           ? `Cannot add — only ${available} item(s) available. You already have ${existingQuantity} in your cart.`
@@ -469,7 +481,7 @@ const addFromWishlist = async (req, res) => {
 
     if (totalQuantity > MAX_QUANTITY_PER_PRODUCT) {
       const remainingAllowed = MAX_QUANTITY_PER_PRODUCT - existingQuantity;
-      return res.status(400).json({
+      return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
         message: remainingAllowed > 0
           ? `You can only add ${remainingAllowed} more of this item. Maximum ${MAX_QUANTITY_PER_PRODUCT} items allowed per product.`
@@ -522,14 +534,14 @@ const addFromWishlist = async (req, res) => {
     const cartCount = cart.items.length;
 
 
-    return res.status(200).json({
+    return res.status(HttpStatus.OK).json({
       success: true,
       message: "Added to cart successfully",
       cartCount
     });
   } catch (error) {
     console.error(" Error adding from wishlist to cart:", error);
-    return res.status(500).json({
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Server error"
     });
@@ -557,7 +569,7 @@ const getCartQuantities = async (req, res) => {
 
     res.json({ success: true, quantities });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ success: false, message: "Server error" });
   }
 };
 

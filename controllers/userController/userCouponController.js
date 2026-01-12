@@ -1,5 +1,6 @@
 const Coupon = require("../../models/couponSchema");
 const User = require("../../models/userSchema");
+const { HttpStatus } = require("../../helpers/status-code");
 
 
 
@@ -9,7 +10,7 @@ const getUserCoupons = async (req,res)=>{
         const userId = req.session.user_id;
         
         if(!userId){
-            return res.status(400).json({
+            return res.status(HttpStatus.BAD_REQUEST).json({
                 success : false,
                 message : "Please log in to view coupons"
             })
@@ -17,13 +18,13 @@ const getUserCoupons = async (req,res)=>{
 
         const user = await User.findById(userId).lean();
         if(!user){
-            return res.status(400).json({
+            return res.status(HttpStatus.BAD_REQUEST).json({
                 success : false,
                 message : "User not found!"
             })
         }
         if(user.isBlocked){
-            return res.status(400).json({
+            return res.status(HttpStatus.BAD_REQUEST).json({
                 success : false,
                 message : "Your account is blocked"
             })
@@ -68,7 +69,7 @@ const getUserCoupons = async (req,res)=>{
 
         if (page < 1 || (page > totalPages && totalPages > 0)) {
       return res
-        .status(404)
+        .status(HttpStatus.NOT_FOUND)
         .json({ success: false, message: "Page not found" });
     }
 
@@ -150,7 +151,7 @@ const getUserCoupons = async (req,res)=>{
     } catch (error) {
          console.error("Error fetching user coupons:", error);
        res
-      .status(500)
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: "Internal server error" });
     }
 }
