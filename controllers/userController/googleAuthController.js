@@ -8,7 +8,6 @@ const googleController = (req, res, next) => {
     }
 
     if (!user) {
-      console.log("Google auth failed");
       if (info?.message?.includes("blocked")) {
         return res.redirect("/login?error=blocked");
       }
@@ -35,7 +34,6 @@ const googleController = (req, res, next) => {
           console.error("Session save error:", err);
           return next(err);
         }
-        console.log("Session saved, redirecting to home");
         return res.redirect("/");
       });
     });

@@ -48,7 +48,6 @@ const postForgotPassword = async (req, res) => {
       purpose: "password-reset",
       createdAt: new Date(), 
     });
-    console.log(otp);
 
     await otpDoc.save();
 
@@ -89,7 +88,6 @@ const resendOtp = async (req, res) => {
       Math.floor(100000 + Math.random() * 900000).toString();
 
     const otp = otpGenerator();
-    console.log("New OTP generated:", otp);
 
     await OTP.deleteMany({ email, purpose: "password-reset" });
 
@@ -159,7 +157,6 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    console.log("Verifying OTP:", otp);
     const email = req.session.user_email;
 
     const user = await User.findOne({ email });
@@ -203,8 +200,6 @@ const verifyOtp = async (req, res) => {
 };
 
 const getResetPassword = async (req, res) => {
-  console.log("trigring...");
-  
   try {
     res.render("resetPasswordForm");
   } catch (error) {

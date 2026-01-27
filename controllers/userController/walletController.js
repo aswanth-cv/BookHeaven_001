@@ -157,7 +157,6 @@ const processCancelRefund = async (userId, order, productId = null) => {
       }
 
       if (itemToCancel.status === 'Cancelled' || itemToCancel.status === 'Returned') {
-        console.log(` Item ${itemToCancel.title} is already ${itemToCancel.status}`);
       }
 
       refundAmount = calculateExactRefundAmount(itemToCancel, order);

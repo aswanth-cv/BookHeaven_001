@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <link rel="stylesheet" href="/styles/user/landingPageStyle.css" />
     <link rel="stylesheet" href="/styles/user/productDetails.css" />
+    <link rel="stylesheet" href="/styles/placeholder-enhancements.css" />
     <style>
       .dropdown-menu {
         border-radius: 15px;
@@ -56,9 +57,34 @@
         left: 10px;
         transform: translateY(-50%);
         color: #6b7280;
+        pointer-events: none;
+      }
+      .search-clear {
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
+        color: #6b7280;
+        cursor: pointer;
+        display: none;
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 18px;
+        line-height: 1;
+        transition: color 0.2s ease;
+      }
+      .search-clear:hover {
+        color: #dc3545;
+      }
+      .search-clear.show {
+        display: block;
       }
       .ps-4 {
         padding-left: 2.5rem !important;
+      }
+      .pe-4 {
+        padding-right: 2.5rem !important;
       }
       .search-input input {
         width: 200px;
@@ -231,26 +257,32 @@
               <div class="search-input">
                 <input
                   type="text"
-                  class="form-control ps-4 search-field"
+                  class="form-control ps-4 pe-4 search-field"
                   placeholder="Search books..."
-                  style="border-radius: 0.5rem; padding-left: 2.5rem"
+                  style="border-radius: 0.5rem; padding-left: 2.5rem; padding-right: 2.5rem"
                 />
                 <div class="search-icon">
                   <i class="ri-search-line"></i>
                 </div>
+                <button class="search-clear" type="button" aria-label="Clear search">
+                  <i class="ri-close-circle-fill"></i>
+                </button>
                 <div class="search-results" id="mobileSearchResults"></div>
               </div>
             </div>
             <div class="search-input d-none d-lg-block me-3">
               <input
                 type="text"
-                class="form-control ps-4 search-field"
+                class="form-control ps-4 pe-4 search-field"
                 placeholder="Search books..."
-                style="border-radius: 0.5rem; padding-left: 2.5rem"
+                style="border-radius: 0.5rem; padding-left: 2.5rem; padding-right: 2.5rem"
               />
               <div class="search-icon">
                 <i class="ri-search-line"></i>
               </div>
+              <button class="search-clear" type="button" aria-label="Clear search">
+                <i class="ri-close-circle-fill"></i>
+              </button>
               <div class="search-results" id="desktopSearchResults"></div>
             </div>
             <div class="header-icons">
@@ -316,6 +348,7 @@
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const searchFields = document.querySelectorAll(".search-field");
+        const searchClearButtons = document.querySelectorAll(".search-clear");
         const desktopResults = document.getElementById("desktopSearchResults");
         const mobileResults = document.getElementById("mobileSearchResults");
         let debounceTimeout;
@@ -352,7 +385,7 @@
             item.href = `/products/${product._id}`;
             item.classList.add("search-result-item");
             item.innerHTML = `
-              <img src="${product.mainImage || "/api/placeholder/500/600"}" alt="${product.title}" />
+              <img src="${product.mainImage || "/api/placeholder/500/600?type=book"}" alt="${product.title}" />
               <div>
                 <div class="title">${product.title}</div>
                 <div class="author">${product.author}</div>
@@ -363,10 +396,20 @@
           resultsContainer.classList.add("show");
         }
 
+        // Handle search input
         searchFields.forEach((field) => {
+          const clearButton = field.parentElement.querySelector('.search-clear');
+          
           field.addEventListener("input", debounce(async function () {
             const query = this.value.trim();
             const resultsContainer = this.closest(".mobile-search") ? mobileResults : desktopResults;
+
+            // Show/hide clear button
+            if (this.value.length > 0) {
+              clearButton.classList.add('show');
+            } else {
+              clearButton.classList.remove('show');
+            }
 
             if (query.length < 2) {
               resultsContainer.classList.remove("show");
@@ -392,6 +435,27 @@
                 resultsContainer.classList.remove("show");
               }
             }, 200);
+          });
+        });
+
+        // Handle clear button clicks
+        searchClearButtons.forEach((button) => {
+          button.addEventListener('click', function() {
+            const searchInput = this.parentElement.querySelector('.search-field');
+            const resultsContainer = this.parentElement.querySelector('.search-results');
+            
+            // Clear the input
+            searchInput.value = '';
+            
+            // Hide clear button
+            this.classList.remove('show');
+            
+            // Hide results
+            resultsContainer.classList.remove('show');
+            resultsContainer.innerHTML = '';
+            
+            // Focus back on input
+            searchInput.focus();
           });
         });
 

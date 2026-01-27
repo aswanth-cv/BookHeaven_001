@@ -6,10 +6,10 @@
         <div class="profile-image-container">
           <img
             id="profileImage"
-            src="<%= user.profileImage || '/api/placeholder/120/120' %>"
+            src="<%= user.profileImage || '/api/placeholder/120/120?type=profile' %>"
             alt="Profile"
             class="rounded-circle img-thumbnail"
-            onerror="this.src='/api/placeholder/120/120'; this.onerror=null;"
+            onerror="this.src='/api/placeholder/120/120?type=profile'; this.onerror=null;"
           />
         </div>
       </div>

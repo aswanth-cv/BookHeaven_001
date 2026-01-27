@@ -21,6 +21,7 @@ const validateCartStock = async (cartItems) => {
   const stockIssues = [];
   
   for (const item of cartItems) {
+    // Get fresh product data to ensure we have the latest stock information
     const product = await Product.findById(item.product._id);
     
     if (!product) {
@@ -50,13 +51,40 @@ const validateCartStock = async (cartItems) => {
         productId: item.product._id,
         productTitle: product.title,
         requestedQuantity: item.quantity,
-        availableStock: product.stock,
+        availableStock: Math.max(0, product.stock), // Ensure non-negative
         issue: ErrorMessages.CART.STOCK_INSUFFICIENT
       });
     }
   }
   
   return stockIssues;
+};
+
+// Helper function to format stock validation error messages for users
+const formatStockErrorMessage = (stockIssues) => {
+  if (!stockIssues || stockIssues.length === 0) {
+    return null;
+  }
+  
+  let message = "Some items in your cart are out of stock. Please update your cart to continue:";
+  
+  stockIssues.forEach(issue => {
+    if (issue.issue === ErrorMessages.CART.STOCK_INSUFFICIENT) {
+      if (issue.availableStock === 0) {
+        message += `\n• ${issue.productTitle}: Currently out of stock`;
+      } else {
+        message += `\n• ${issue.productTitle}: Only ${issue.availableStock} available (you have ${issue.requestedQuantity} in cart)`;
+      }
+    } else if (issue.issue === ErrorMessages.PRODUCT.UNAVAILABLE) {
+      message += `\n• ${issue.productTitle}: Product is no longer available`;
+    } else if (issue.issue === ErrorMessages.PRODUCT.NOT_FOUND) {
+      message += `\n• ${issue.productTitle}: Product not found`;
+    } else {
+      message += `\n• ${issue.productTitle}: ${issue.issue}`;
+    }
+  });
+  
+  return message;
 };
 
 const getInitialPaymentStatus = (paymentMethod) => {
@@ -78,7 +106,6 @@ const generateOrderNumber = () => {
   const timestamp = Date.now().toString();
   const random = Math.floor(1000 + Math.random() * 9000).toString();
   const orderNumber = `ORD-${timestamp}-${random}`;
-  console.log("Generated order number:", orderNumber);
   return orderNumber;
 };
 
@@ -115,16 +142,7 @@ const getCheckout = async (req, res) => {
     const stockIssues = await validateCartStock(cartItems);
     
     if (stockIssues.length > 0) {
-      // Create detailed error message
-      let errorMessage = "Stock has been updated. Please adjust your cart quantities:\n";
-      stockIssues.forEach(issue => {
-        if (issue.issue === ErrorMessages.CART.STOCK_INSUFFICIENT) {
-          errorMessage += `• ${issue.productTitle}: You have ${issue.requestedQuantity} in cart, but only ${issue.availableStock} available\n`;
-        } else {
-          errorMessage += `• ${issue.productTitle}: ${issue.issue}\n`;
-        }
-      });
-      
+      const errorMessage = formatStockErrorMessage(stockIssues);
       req.session.errorMessage = errorMessage;
       return res.redirect("/cart");
     }
@@ -180,8 +198,9 @@ const getCheckout = async (req, res) => {
     
     if (req.session.appliedCoupon) {
       const coupon = await Coupon.findById(req.session.appliedCoupon);
+      const currentDate = new Date();
 
-      if (coupon && coupon.isActive && new Date() <= coupon.expiryDate) {
+      if (coupon && coupon.isActive && currentDate >= coupon.startDate && currentDate <= coupon.expiryDate) {
         if (subtotal >= coupon.minOrderAmount) {
           appliedCoupon = coupon;
 
@@ -261,7 +280,7 @@ const getCheckout = async (req, res) => {
 
     tax = (subtotal - couponDiscount) * 0.08;
     totalAmount = subtotal - couponDiscount + tax + deliveryCharge;
-    cartCount = validCartItems.reduce((sum, item) => sum + item.quantity, 0);
+    cartCount = validCartItems.length;
 
     if (addresses.length === 0) {
       req.session.errorMessage = ErrorMessages.ADDRESS.NOT_FOUND;
@@ -320,8 +339,11 @@ const getCheckout = async (req, res) => {
 
 async function getAvailableCouponsForUser(userId, orderAmount) {
   try { 
+    const currentDate = new Date();
     const allCoupons = await Coupon.find({
       isActive: true,
+      startDate: { $lte: currentDate },
+      expiryDate: { $gte: currentDate },
       minOrderAmount: { $lte: orderAmount }
     }).lean();
 
@@ -527,6 +549,21 @@ const placeOrder = async (req, res) => {
       throw new Error("No valid items in cart");
     }
 
+    // **CRITICAL: Final stock validation before payment processing**
+    const stockIssues = await validateCartStock(cartItems);
+    
+    if (stockIssues.length > 0) {
+      const errorMessage = formatStockErrorMessage(stockIssues);
+      
+      // Return specific error for stock issues
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        message: errorMessage,
+        stockIssues: stockIssues,
+        requiresCartUpdate: true
+      });
+    }
+    
     let subtotal = 0;
     let offerDiscount = 0;
     let couponDiscount = 0;
@@ -900,6 +937,20 @@ const createRazorpayOrder = async (req, res) => {
       return res.status(HttpStatus.BAD_REQUEST).json({ success: false, message: "No valid items in cart" });
     }
 
+    // **CRITICAL: Validate stock before creating Razorpay order**
+    const stockIssues = await validateCartStock(cartItems);
+    
+    if (stockIssues.length > 0) {
+      const errorMessage = formatStockErrorMessage(stockIssues);
+      
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        message: errorMessage,
+        stockIssues: stockIssues,
+        requiresCartUpdate: true
+      });
+    }
+    
 
     const orderNumber = generateOrderNumber();
 
@@ -982,7 +1033,8 @@ const createRazorpayOrder = async (req, res) => {
     let appliedCouponCode = null;
     if (req.session.appliedCoupon) {
       const coupon = await Coupon.findById(req.session.appliedCoupon);
-      if (coupon && coupon.isActive && new Date() <= coupon.expiryDate) {
+      const currentDate = new Date();
+      if (coupon && coupon.isActive && currentDate >= coupon.startDate && currentDate <= coupon.expiryDate) {
         const amountAfterOffers = subtotalAfterOffers;
         if (amountAfterOffers >= coupon.minOrderAmount) {
           const couponResult = calculateProportionalCouponDiscount(coupon, orderItems);
@@ -1467,7 +1519,8 @@ const getCurrentCartTotal = async (req, res) => {
     let couponDiscount = 0;
     if (req.session.appliedCoupon) {
       const coupon = await Coupon.findById(req.session.appliedCoupon);
-      if (coupon && coupon.isActive && new Date() <= coupon.expiryDate) {
+      const currentDate = new Date();
+      if (coupon && coupon.isActive && currentDate >= coupon.startDate && currentDate <= coupon.expiryDate) {
         const amountAfterOffers = subtotal - offerDiscount;
         if (amountAfterOffers >= coupon.minOrderAmount) {
           const couponResult = calculateProportionalCouponDiscount(coupon, cartItems);

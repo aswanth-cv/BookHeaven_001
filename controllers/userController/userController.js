@@ -1,5 +1,6 @@
 const categoryController = require("../../controllers/userController/categoryController");
 const Product = require('../../models/productSchema');
+const Wishlist = require('../../models/wishlistSchema');
 const { getActiveOfferForProduct, calculateDiscount } = require('../../utils/offer-helper');
 const { HttpStatus } = require("../../helpers/status-code");
 
@@ -16,6 +17,16 @@ const loadHomePage = async (req, res) => {
   try {
     const categories = await categoryController.getCategories();
     const LIMIT = 4;
+    const userId = req.session.user_id;
+
+    // Get user's wishlist if authenticated
+    let userWishlistProductIds = [];
+    if (userId) {
+      const wishlist = await Wishlist.findOne({ user: userId });
+      if (wishlist && wishlist.items) {
+        userWishlistProductIds = wishlist.items.map(item => item.product.toString());
+      }
+    }
 
     const topSellingProducts = await Product.find({ isListed: true, isDeleted: false })
       .populate('category')
@@ -27,7 +38,7 @@ const loadHomePage = async (req, res) => {
       .sort({ createdAt: -1  }) 
       .limit(LIMIT);
 
-    // Apply offers to top selling products
+    // Apply offers to top selling products and mark wishlist status
     for (const product of topSellingProducts) {
       const offer = await getActiveOfferForProduct(
         product._id,
@@ -50,9 +61,12 @@ const loadHomePage = async (req, res) => {
         product.discountAmount = 0;
         product.discountPercentage = 0;
       }
+      
+      // Mark if product is in user's wishlist
+      product.isWishlisted = userWishlistProductIds.includes(product._id.toString());
     }
 
-    // Apply offers to new arrivals
+    // Apply offers to new arrivals and mark wishlist status
     for (const product of newArrivals) {
       const offer = await getActiveOfferForProduct(
         product._id,
@@ -75,6 +89,9 @@ const loadHomePage = async (req, res) => {
         product.discountAmount = 0;
         product.discountPercentage = 0;
       }
+      
+      // Mark if product is in user's wishlist
+      product.isWishlisted = userWishlistProductIds.includes(product._id.toString());
     }
 
 
@@ -82,8 +99,7 @@ const loadHomePage = async (req, res) => {
       categories,
       topSellingProducts,
       newArrivals,
-      user: req.session.user_id ? { id: req.session.user_id } : null,
-      isAuthenticated: !!req.session.user_id
+      user: req.session.user_id ? { id: req.session.user_id } : null
     });
 
 

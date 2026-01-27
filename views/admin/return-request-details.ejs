@@ -402,10 +402,10 @@
               <td>
                 <div class="product-cell">
                   <img
-                    src="<%= item.image || '/api/placeholder/60/75' %>"
+                    src="<%= item.image || '/api/placeholder/60/75?type=book' %>"
                     alt="<%= item.title || 'Product' %>"
                     class="product-image"
-                    onerror="this.src='/api/placeholder/60/75'"
+                    onerror="this.src='/api/placeholder/60/75?type=book'"
                   >
                   <div class="product-details">
                     <div class="product-name"><%= item.title || 'Unknown Product' %></div>

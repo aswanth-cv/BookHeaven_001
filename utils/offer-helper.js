@@ -19,21 +19,37 @@ const getActiveOfferForProduct = async (productId, productCategoryId, productPri
 
     const offerQueryConditions = []
 
-    offerQueryConditions.push({ appliesTo: "all_products" })
+    // **CRITICAL FIX: Restrict flat amount offers from being applied globally**
+    // Only allow percentage discounts for global offers (all_products and all_categories)
+    // Flat amount discounts should only be applied to specific products/categories
+    
+    // Allow all_products offers only for percentage discounts
+    offerQueryConditions.push({ 
+      appliesTo: "all_products",
+      discountType: "percentage"  // Only percentage discounts for global application
+    })
 
+    // Allow specific product offers (both percentage and flat amount)
     if (productId) {
       offerQueryConditions.push({
         appliesTo: "specific_products",
         applicableProducts: { $in: [productId] },
+        // Both percentage and flat amount allowed for specific products
       })
     }
 
-    offerQueryConditions.push({ appliesTo: "all_categories" })
+    // Allow all_categories offers only for percentage discounts
+    offerQueryConditions.push({ 
+      appliesTo: "all_categories",
+      discountType: "percentage"  // Only percentage discounts for global category application
+    })
 
+    // Allow specific category offers (both percentage and flat amount)
     if (categoryToQuery) {
       offerQueryConditions.push({
         appliesTo: "specific_categories",
         applicableCategories: { $in: [categoryToQuery] },
+        // Both percentage and flat amount allowed for specific categories
       })
     }
 
@@ -52,6 +68,15 @@ const getActiveOfferForProduct = async (productId, productCategoryId, productPri
     let bestDiscountAmount = 0
 
     for (const offer of potentialOffers) {
+      // **ADDITIONAL VALIDATION: Double-check flat amount restrictions**
+      if (offer.discountType === "fixed") {
+        // Flat amount offers should only be allowed for specific products/categories
+        if (offer.appliesTo === "all_products" || offer.appliesTo === "all_categories") {
+          console.warn(`Skipping invalid flat amount offer "${offer.title}" with global application: ${offer.appliesTo}`)
+          continue // Skip this offer as it violates our restriction
+        }
+      }
+
       const discountInfo = calculateDiscount(offer, productPrice)
 
       if (discountInfo.discountAmount > bestDiscountAmount) {
@@ -117,7 +142,7 @@ const calculateProportionalCouponDiscount = (coupon, items) => {
   if (cartTotal <= 0) {
     return { totalDiscount: 0, itemDiscounts: {} }
   }
-
+ 
   let totalCouponDiscount = 0;
   if (coupon.discountType === "percentage") {
     totalCouponDiscount = (cartTotal * coupon.discountValue) / 100;
@@ -387,6 +412,58 @@ const getUnifiedPriceBreakdown = (item, order = null) => {
 
 
 
+const recalculateCartTotals = async (cart) => {
+  if (!cart || !cart.items || cart.items.length === 0) {
+    return { totalAmount: 0, totalDiscount: 0, itemCount: 0 };
+  }
+
+  let totalAmount = 0;
+  let totalDiscount = 0;
+  let itemCount = 0;
+
+  for (const item of cart.items) {
+    if (!item.product) continue;
+    
+    // Get the product details if not populated
+    let product = item.product;
+    if (typeof product === 'string') {
+      const Product = require("../models/productSchema");
+      product = await Product.findById(product);
+    }
+    
+    if (!product || !product.isListed) continue;
+
+    const currentPrice = product.salePrice || product.regularPrice || 0;
+    const offer = await getActiveOfferForProduct(
+      product._id,
+      product.category,
+      currentPrice
+    );
+
+    if (offer && isOfferActive(offer)) {
+      const { finalPrice, discountAmount } = calculateDiscount(offer, currentPrice);
+      totalAmount += item.quantity * finalPrice;
+      totalDiscount += item.quantity * discountAmount;
+    } else {
+      totalAmount += item.quantity * currentPrice;
+    }
+    
+    itemCount += item.quantity;
+    
+    // Update priceAtAddition if it differs from current price
+    if (item.priceAtAddition !== currentPrice) {
+      item.priceAtAddition = currentPrice;
+    }
+  }
+
+  return {
+    totalAmount: Number(totalAmount.toFixed(2)),
+    totalDiscount: Number(totalDiscount.toFixed(2)),
+    itemCount
+  };
+};
+
+
 module.exports = {
     getActiveOfferForProduct,
     calculateDiscount,
@@ -397,5 +474,6 @@ module.exports = {
     isOfferActive,
     getOfferStatus,
     getOfferPriority,
-    getUnifiedPriceBreakdown
+    getUnifiedPriceBreakdown,
+    recalculateCartTotals
 }

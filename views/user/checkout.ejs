@@ -2441,6 +2441,59 @@
           '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
 
         try {
+          // **CRITICAL: Validate stock before proceeding with payment**
+          console.log("🔍 Validating stock before payment...");
+          const stockValidationResponse = await fetch("/checkout/validate-stock", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            }
+          });
+
+          const stockValidation = await stockValidationResponse.json();
+          
+          if (!stockValidation.success) {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-bag-check me-2"></i>Place Order';
+            Toast.fire({
+              icon: "error",
+              title: "Unable to validate stock. Please try again.",
+            });
+            return;
+          }
+
+          if (!stockValidation.valid) {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-bag-check me-2"></i>Place Order';
+            
+            // Show detailed stock issues
+            let stockMessage = "Some items in your cart are out of stock. Please update your cart to continue:";
+            if (stockValidation.stockIssues && stockValidation.stockIssues.length > 0) {
+              stockValidation.stockIssues.forEach(issue => {
+                if (issue.issue && issue.issue.includes("insufficient")) {
+                  stockMessage += `\n• ${issue.productTitle}: Only ${issue.availableStock} available (you have ${issue.requestedQuantity} in cart)`;
+                } else {
+                  stockMessage += `\n• ${issue.productTitle}: Product is no longer available`;
+                }
+              });
+            }
+            
+            Toast.fire({
+              icon: "error",
+              title: stockMessage,
+              timer: 8000,
+              showConfirmButton: true,
+              confirmButtonText: "Update Cart",
+              confirmButtonColor: "#198754"
+            }).then((result) => {
+              if (result.isConfirmed) {
+                window.location.href = "/cart";
+              }
+            });
+            return;
+          }
+          
+          console.log("✅ Stock validation passed, proceeding with payment...");
           if (paymentMethodValue === "Razorpay") {
             // Handle Razorpay payment
             console.log("🚀 Creating Razorpay order...");

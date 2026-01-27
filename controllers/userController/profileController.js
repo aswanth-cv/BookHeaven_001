@@ -262,8 +262,7 @@ const requestEmailUpdate = async(req,res)=>{
         email:email.toLowerCase(),
         otp,
         purpose:"email-update"
-    })
-    console.log(`Generated OTP: ${otp}`)
+    });
 
     try {
         await sendOtpEmail(

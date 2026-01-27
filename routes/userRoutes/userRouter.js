@@ -24,6 +24,7 @@ const changePasswordController = require("../../controllers/userController/chang
 const walletController = require("../../controllers/userController/walletController");
 const userCouponController = require("../../controllers/userController/userCouponController");
 const referralController =require("../../controllers/userController/referral-controller");
+const searchController = require("../../controllers/userController/searchController");
 const passport = require("passport");
 
 
@@ -34,6 +35,9 @@ const passport = require("passport");
 
 userRouter.get("/", userController.loadHomePage);
 userRouter.get("/pageNotFound", userController.pageNotFound);
+
+// Search route
+userRouter.get("/search", searchController.searchProducts);
 
 userRouter.get("/signup", isNotAuthenticated, preventBackButtonCache, signupController.getSignup);
 userRouter.post("/signup", isNotAuthenticated, signupValidator.signupValidator, signupController.postSignup);

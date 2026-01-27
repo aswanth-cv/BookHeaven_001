@@ -121,7 +121,7 @@
               <div class="row align-items-center">
                 <div class="col-md-2 col-4 mb-3 mb-md-0">
                   <div class="position-relative">
-                    <img src="<%= item.product.mainImage || '/api/placeholder/150/200' %>" alt="<%= item.product.title %>" class="img-fluid rounded" />
+                    <img src="<%= item.product.mainImage || '/api/placeholder/150/200?type=book' %>" alt="<%= item.product.title %>" class="img-fluid rounded" />
                     <% if (item.product.activeOffer && item.product.discountPercentage > 0) { %>
                       <span class="position-absolute top-0 end-0 offer-badge"><%= item.product.discountPercentage %>% OFF</span>
                     <% } %>
@@ -274,7 +274,7 @@
               <% } %>
               
               <a href="/products/<%= product._id %>" class="text-decoration-none">
-                <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %>" class="product-image" />
+                <img src="<%= product.mainImage || '/api/placeholder/600/800?type=book' %>" alt="<%= product.title %>" class="product-image" />
               </a>
             </div>
             <div class="p-3">
@@ -661,15 +661,82 @@ document.addEventListener('DOMContentLoaded', function () {
       if (result.success) {
         quantityInput.dataset.previousValue = quantity;
         
-        // Update price display
+        // Update price displays with correct values
         const priceElement = item.querySelector('.discounted-price') || item.querySelector('.fw-bold');
-        if (priceElement) {
-          priceElement.textContent = `₹${result.itemTotal.toFixed(2)}`;
+        const originalPriceElement = item.querySelector('.original-price');
+        
+        if (result.hasOffer && result.offerValid) {
+          // Show discounted pricing
+          if (priceElement) {
+            priceElement.textContent = `₹${result.itemTotal.toFixed(2)}`;
+            priceElement.classList.add('discounted-price');
+          }
+          
+          if (originalPriceElement) {
+            originalPriceElement.textContent = `₹${result.originalItemTotal.toFixed(2)}`;
+            originalPriceElement.style.display = 'inline';
+          } else if (priceElement) {
+            // Create original price element if it doesn't exist
+            const originalSpan = document.createElement('span');
+            originalSpan.className = 'original-price';
+            originalSpan.textContent = `₹${result.originalItemTotal.toFixed(2)}`;
+            priceElement.parentNode.insertBefore(originalSpan, priceElement);
+          }
+          
+          // Update or add offer badge
+          let offerBadge = item.querySelector('.offer-badge');
+          if (!offerBadge && result.discountPercentage > 0) {
+            offerBadge = document.createElement('span');
+            offerBadge.className = 'position-absolute top-0 end-0 offer-badge';
+            const imageContainer = item.querySelector('.position-relative');
+            if (imageContainer) {
+              imageContainer.appendChild(offerBadge);
+            }
+          }
+          if (offerBadge) {
+            offerBadge.textContent = `${result.discountPercentage}% OFF`;
+          }
+          
+          // Update offer title
+          let offerTitle = item.querySelector('.offer-title');
+          if (!offerTitle && result.offerTitle) {
+            offerTitle = document.createElement('p');
+            offerTitle.className = 'offer-title mt-1';
+            const productInfo = item.querySelector('.col-md-6');
+            if (productInfo) {
+              productInfo.appendChild(offerTitle);
+            }
+          }
+          if (offerTitle && result.offerTitle) {
+            offerTitle.innerHTML = `<i class="ri-price-tag-3-line"></i> ${result.offerTitle}`;
+          }
+        } else {
+          // No offer or offer expired - show regular pricing
+          if (priceElement) {
+            priceElement.textContent = `₹${result.originalItemTotal.toFixed(2)}`;
+            priceElement.classList.remove('discounted-price');
+          }
+          
+          if (originalPriceElement) {
+            originalPriceElement.style.display = 'none';
+          }
+          
+          // Remove offer badge
+          const offerBadge = item.querySelector('.offer-badge');
+          if (offerBadge) {
+            offerBadge.remove();
+          }
+          
+          // Remove offer title
+          const offerTitle = item.querySelector('.offer-title');
+          if (offerTitle) {
+            offerTitle.remove();
+          }
         }
         
-        // Update order summary
+        // Update order summary with correct discount amount
         if (typeof result.totalAmount === 'number') {
-          updateOrderSummaryDOM(result.totalAmount, result.cartCount);
+          updateOrderSummaryDOM(result.totalAmount, result.cartCount, result.totalDiscount || 0);
         }
         
         if (result.cartCount !== undefined) {
@@ -678,13 +745,32 @@ document.addEventListener('DOMContentLoaded', function () {
           recalculateCartCount();
         }
 
-        showNotification('success', result.message || 'Cart updated successfully');
-        
-        // Reload the page to refresh the summary
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000); // Delay to show notification and spinner
+        // Show appropriate success message
+        let message = result.message || 'Cart updated successfully';
+        if (result.offerExpired) {
+          message = 'Cart updated - offer has expired';
+          showNotification('warning', message);
+          // Add visual indication of expired offer
+          const offerBadge = item.querySelector('.offer-badge');
+          if (offerBadge) {
+            offerBadge.classList.add('offer-expired');
+          }
+        } else if (result.priceChanged) {
+          message = 'Cart updated - price has been updated';
+          showNotification('info', message);
+          // Add visual indication of price change
+          const priceContainer = item.querySelector('.col-md-2:last-child');
+          if (priceContainer) {
+            priceContainer.classList.add('price-updated');
+            setTimeout(() => {
+              priceContainer.classList.remove('price-updated');
+            }, 2000);
+          }
+        } else {
+          showNotification('success', message);
+        }
       } else {
+        // Revert quantity on failure
         quantityInput.value = previousValue;
         showNotification('error', result.message || 'Failed to update cart');
       }
@@ -724,7 +810,7 @@ document.addEventListener('DOMContentLoaded', function () {
           item.remove();
           
           if (typeof result.totalAmount === 'number') {
-            updateOrderSummaryDOM(result.totalAmount, result.cartCount);
+            updateOrderSummaryDOM(result.totalAmount, result.cartCount, result.totalDiscount || 0);
           }
           
           updateCartCount(result.cartCount);
@@ -788,18 +874,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function recalculateCartCount() {
     if (cartCountElement) {
-      const count = Array.from(document.querySelectorAll('.cart-item'))
-        .reduce((sum, item) => {
-          const input = item.querySelector('.quantity-input');
-          return sum + (input ? parseInt(input.value) : 0);
-        }, 0);
+      // Count the number of unique items (cart items), not total quantity
+      const count = document.querySelectorAll('.cart-item').length;
       
       cartCountElement.textContent = count;
       cartCountElement.dataset.count = count;
     }
   }
 
-  function updateOrderSummaryDOM(totalAmount, cartCount) {
+  function updateOrderSummaryDOM(totalAmount, cartCount, totalDiscount) {
+    // Update subtotal (before discount)
     const subtotalElement = findElement([
       '#orderSummary .d-flex:first-child .fw-semibold',
       '#orderSummary .d-flex:nth-child(1) .fw-semibold',
@@ -807,19 +891,110 @@ document.addEventListener('DOMContentLoaded', function () {
     ]);
     
     if (subtotalElement) {
-      subtotalElement.textContent = `₹${totalAmount.toFixed(2)}`;
+      const originalSubtotal = totalAmount + (totalDiscount || 0);
+      subtotalElement.textContent = `₹${originalSubtotal.toFixed(2)}`;
     }
     
-    const totalElement = findElement([
-      '#orderSummary .d-flex:last-of-type .fs-5.fw-bold:last-child', 
-      '#orderSummary .d-flex:nth-child(4) .fs-5.fw-bold',
-      '#orderSummary .fs-5.fw-bold:last-child'
-    ]);
+    // Handle discount section - this is the key fix
+    let discountRow = document.querySelector('#orderSummary .text-success');
     
-    if (totalElement) {
-      totalElement.textContent = `₹${totalAmount.toFixed(2)}`;
+    if (totalDiscount && totalDiscount > 0) {
+      if (discountRow) {
+        // Update existing discount row
+        const discountElement = discountRow.querySelector('.fw-semibold');
+        if (discountElement) {
+          discountElement.textContent = `-₹${totalDiscount.toFixed(2)}`;
+        }
+      } else {
+        // Create new discount row if it doesn't exist
+        const subtotalRow = document.querySelector('#orderSummary .d-flex:first-child');
+        if (subtotalRow) {
+          const discountRowHTML = `
+            <div class="d-flex justify-content-between mb-3 text-success">
+              <span>Discount</span>
+              <span class="fw-semibold">-₹${totalDiscount.toFixed(2)}</span>
+            </div>
+          `;
+          subtotalRow.insertAdjacentHTML('afterend', discountRowHTML);
+        }
+      }
+    } else {
+      // Remove discount row if no discount
+      if (discountRow) {
+        discountRow.remove();
+      }
     }
     
+    // Alternative approach: Find discount by content
+    if (totalDiscount && totalDiscount > 0) {
+      const allRows = document.querySelectorAll('#orderSummary .d-flex');
+      let discountFound = false;
+      
+      allRows.forEach(row => {
+        const firstSpan = row.querySelector('span:first-child');
+        if (firstSpan && firstSpan.textContent.trim() === 'Discount') {
+          const discountElement = row.querySelector('.fw-semibold');
+          if (discountElement) {
+            discountElement.textContent = `-₹${totalDiscount.toFixed(2)}`;
+            discountFound = true;
+          }
+        }
+      });
+      
+      if (!discountFound) {
+        rebuildOrderSummary(totalAmount, cartCount, totalDiscount);
+        return;
+      }
+    }
+    
+    // Update delivery charge - need to find the correct delivery row
+    const deliveryRow = Array.from(document.querySelectorAll('#orderSummary .d-flex')).find(row => {
+      const span = row.querySelector('span:first-child');
+      return span && span.textContent.trim() === 'Delivery';
+    });
+    
+    const originalSubtotal = totalAmount + (totalDiscount || 0);
+    const deliveryCharge = originalSubtotal >= 1000 ? 0 : 50;
+    
+    if (deliveryRow) {
+      const deliveryElement = deliveryRow.querySelector('.fw-semibold');
+      if (deliveryElement) {
+        if (deliveryCharge > 0) {
+          deliveryElement.innerHTML = `₹${deliveryCharge.toFixed(2)}`;
+        } else {
+          deliveryElement.innerHTML = '<span class="text-success">FREE</span>';
+        }
+      }
+    }
+    
+    // Update delivery alert
+    const deliveryAlert = document.querySelector('#orderSummary .alert');
+    if (deliveryAlert) {
+      if (deliveryCharge > 0) {
+        const amountNeeded = (1000 - originalSubtotal).toFixed(2);
+        deliveryAlert.className = 'alert alert-info small mb-3';
+        deliveryAlert.innerHTML = `<i class="ri-truck-line me-1"></i> Add ₹${amountNeeded} more to get FREE delivery!`;
+      } else {
+        deliveryAlert.className = 'alert alert-success small mb-3';
+        deliveryAlert.innerHTML = '<i class="ri-check-line me-1"></i> Congratulations! You qualify for FREE delivery.';
+      }
+    }
+    
+    // Update total - find the total row more reliably
+    const totalRow = Array.from(document.querySelectorAll('#orderSummary .d-flex')).find(row => {
+      const span = row.querySelector('.fs-5.fw-bold');
+      return span && span.textContent.trim() === 'Total';
+    });
+    
+    if (totalRow) {
+      const totalElement = totalRow.querySelector('.fs-5.fw-bold:last-child');
+      if (totalElement) {
+        const finalTotal = totalAmount + deliveryCharge;
+        totalElement.textContent = `₹${finalTotal.toFixed(2)}`;
+      }
+    }
+    
+    // Update item count in subtotal
     if (cartCount !== undefined) {
       const itemCountElement = findElement([
         '#orderSummary .d-flex:first-child span:first-child',
@@ -836,13 +1011,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
     
-    if (!subtotalElement || !totalElement) {
-      rebuildOrderSummary(totalAmount, cartCount);
+    // Force a visual refresh and fallback to rebuild if needed
+    if (!subtotalElement || !document.querySelector('#orderSummary .fs-5.fw-bold:last-child')) {
+      rebuildOrderSummary(totalAmount, cartCount, totalDiscount);
+    } else {
+      orderSummary.style.display = 'none';
+      orderSummary.offsetHeight;
+      orderSummary.style.display = '';
     }
-    
-    orderSummary.style.display = 'none';
-    orderSummary.offsetHeight;
-    orderSummary.style.display = '';
   }
   
   function findElement(selectors) {
@@ -855,10 +1031,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return null;
   }
   
-  function rebuildOrderSummary(totalAmount, cartCount) {
+  function rebuildOrderSummary(totalAmount, cartCount, totalDiscount) {
     if (!orderSummary) {
       return;
     }
+    
+    const originalSubtotal = totalAmount + (totalDiscount || 0);
+    const deliveryCharge = originalSubtotal >= 1000 ? 0 : 50;
+    const finalTotal = totalAmount + deliveryCharge;
     
     const summaryHTML = `
       <h2 class="fs-4 fw-bold mb-4">Order Summary</h2>
@@ -866,29 +1046,43 @@ document.addEventListener('DOMContentLoaded', function () {
       <!-- Subtotal -->
       <div class="d-flex justify-content-between mb-3">
         <span>Subtotal (${cartCount || 0} items)</span>
-        <span class="fw-semibold">₹${(totalAmount + (parseFloat(totalDiscount) || 0)).toFixed(2)}</span>
+        <span class="fw-semibold">₹${originalSubtotal.toFixed(2)}</span>
       </div>
       
       <!-- Discount -->
-      ${parseFloat(totalDiscount) > 0 ? `
+      ${(totalDiscount && totalDiscount > 0) ? `
         <div class="d-flex justify-content-between mb-3 text-success">
           <span>Discount</span>
-          <span class="fw-semibold">-₹${parseFloat(totalDiscount).toFixed(2)}</span>
+          <span class="fw-semibold">-₹${totalDiscount.toFixed(2)}</span>
         </div>
       ` : ''}
       
-      <!-- Shipping -->
+      <!-- Delivery -->
       <div class="d-flex justify-content-between mb-3">
-        <span>Shipping</span>
-        <span class="fw-semibold">₹0</span>
+        <span>Delivery</span>
+        <span class="fw-semibold">
+          ${deliveryCharge > 0 ? `₹${deliveryCharge.toFixed(2)}` : '<span class="text-success">FREE</span>'}
+        </span>
       </div>
+      
+      ${deliveryCharge > 0 ? `
+        <div class="alert alert-info small mb-3">
+          <i class="ri-truck-line me-1"></i>
+          Add ₹${(1000 - originalSubtotal).toFixed(2)} more to get FREE delivery!
+        </div>
+      ` : `
+        <div class="alert alert-success small mb-3">
+          <i class="ri-check-line me-1"></i>
+          Congratulations! You qualify for FREE delivery.
+        </div>
+      `}
       
       <hr class="my-3">
       
       <!-- Total -->
       <div class="d-flex justify-content-between align-items-center mb-4">
         <span class="fs-5 fw-bold">Total</span>
-        <span class="fs-5 fw-bold">₹${totalAmount.toFixed(2)}</span>
+        <span class="fs-5 fw-bold">₹${finalTotal.toFixed(2)}</span>
       </div>
       
       <!-- Checkout Button -->

@@ -540,9 +540,9 @@ document.getElementById("userSignup").addEventListener("submit", async (event) =
         Swal.fire({
           icon: "success",
           title: "Signup Successful",
-          text: "Welcome to BookHaven!",
+          text: "Please verify your email with the OTP we sent you.",
           confirmButtonColor: "#3085d6",
-          confirmButtonText: "Proceed to Login",
+          confirmButtonText: "Verify OTP",
         }).then(() => {
           window.location.href = '/verify-otp';
         });

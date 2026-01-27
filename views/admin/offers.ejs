@@ -892,17 +892,80 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Setup discount type symbol
+    // Setup discount type symbol and restrictions
     function setupDiscountTypeSymbol(modalType) { 
         const discountTypeSelect = document.getElementById(`${modalType}DiscountType`);
         const discountSymbolSpan = document.querySelector(`.${modalType}-discount-symbol`);
+        const appliesToSelect = document.getElementById(`${modalType}AppliesTo`);
         
         if (discountTypeSelect && discountSymbolSpan) {
             const updateSymbol = () => {
                 discountSymbolSpan.textContent = discountTypeSelect.value === 'percentage' ? '%' : '₹';
+                
+                // **CRITICAL: Handle flat amount discount restrictions**
+                handleFlatAmountRestrictions(modalType);
             };
             discountTypeSelect.addEventListener('change', updateSymbol);
             updateSymbol(); 
+        }
+        
+        // Also handle when appliesTo changes
+        if (appliesToSelect) {
+            appliesToSelect.addEventListener('change', () => {
+                handleFlatAmountRestrictions(modalType);
+            });
+        }
+    }
+    
+    // **NEW: Handle flat amount discount restrictions**
+    function handleFlatAmountRestrictions(modalType) {
+        const discountTypeSelect = document.getElementById(`${modalType}DiscountType`);
+        const appliesToSelect = document.getElementById(`${modalType}AppliesTo`);
+        
+        if (!discountTypeSelect || !appliesToSelect) return;
+        
+        const isFixedDiscount = discountTypeSelect.value === 'fixed';
+        const appliesTo = appliesToSelect.value;
+        
+        // Get or create restriction notice
+        let restrictionNotice = document.getElementById(`${modalType}FlatAmountRestriction`);
+        if (!restrictionNotice) {
+            restrictionNotice = document.createElement('div');
+            restrictionNotice.id = `${modalType}FlatAmountRestriction`;
+            restrictionNotice.className = 'alert alert-warning mt-2';
+            restrictionNotice.innerHTML = `
+                <i class="ri-information-line me-2"></i>
+                <strong>Restriction:</strong> Flat amount discounts cannot be applied to "All Products" or "All Categories". 
+                Please select specific products/categories or use percentage discount for global offers.
+            `;
+            appliesToSelect.parentNode.appendChild(restrictionNotice);
+        }
+        
+        // Show/hide restriction notice and disable options
+        if (isFixedDiscount) {
+            restrictionNotice.style.display = 'block';
+            
+            // Disable global options for flat amount discounts
+            Array.from(appliesToSelect.options).forEach(option => {
+                if (option.value === 'all_products' || option.value === 'all_categories') {
+                    option.disabled = true;
+                    option.title = 'Not available for flat amount discounts';
+                }
+            });
+            
+            // If currently selected option is not allowed, change to specific_products
+            if (appliesTo === 'all_products' || appliesTo === 'all_categories') {
+                appliesToSelect.value = 'specific_products';
+                appliesToSelect.dispatchEvent(new Event('change'));
+            }
+        } else {
+            restrictionNotice.style.display = 'none';
+            
+            // Re-enable all options for percentage discounts
+            Array.from(appliesToSelect.options).forEach(option => {
+                option.disabled = false;
+                option.title = '';
+            });
         }
     }
 

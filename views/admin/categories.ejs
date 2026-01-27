@@ -215,7 +215,8 @@
                 ></textarea>
               </div>
               <div class="mb-3">
-                <label class="form-label">Category Image</label>
+                <label class="form-label">Category Image <span class="text-danger">*</span></label>
+                <small class="text-muted d-block mb-2">Please select an image for the category</small>
                 <div class="file-upload-wrapper">
                   <div class="file-preview">
                     <img
@@ -310,6 +311,7 @@
               </div>
               <div class="mb-3">
                 <label class="form-label">Category Image</label>
+                <small class="text-muted d-block mb-2">Leave empty to keep current image</small>
                 <div class="file-upload-wrapper">
                   <div class="file-preview">
                     <img
@@ -457,6 +459,19 @@ document
   .getElementById("addCategoryForm")
   .addEventListener("submit", async function (e) {
     e.preventDefault();
+    
+    // Check if image is selected for new category
+    const imageInput = document.getElementById("newCategoryImage");
+    if (!imageInput.files || imageInput.files.length === 0) {
+      Swal.fire({
+        title: "Image Required",
+        text: "Please select an image for the category.",
+        icon: "warning",
+        confirmButtonText: "OK"
+      });
+      return;
+    }
+    
     const formData = new FormData(this);
 
     try {
@@ -488,16 +503,29 @@ document
           });
         }
       } else {
+        // Handle different types of errors
+        let errorMessage = "Failed to add category";
+        
+        if (data.error) {
+          errorMessage = data.error;
+          
+          // Handle validation errors specifically
+          if (data.details && Array.isArray(data.details)) {
+            errorMessage = data.details.join(", ");
+          }
+        }
+        
         Swal.fire({
           title: "Error!",
-          text: data.error || "Failed to add category",
+          text: errorMessage,
           icon: "error",
         });
       }
     } catch (error) {
+      console.error("Add category error:", error);
       Swal.fire({
         title: "Error!",
-        text: "Server Error",
+        text: "Server Error. Please try again.",
         icon: "error",
       });
     }
@@ -540,16 +568,29 @@ document
           });
         }
       } else {
+        // Handle different types of errors
+        let errorMessage = "Failed to update category";
+        
+        if (data.error) {
+          errorMessage = data.error;
+          
+          // Handle validation errors specifically
+          if (data.details && Array.isArray(data.details)) {
+            errorMessage = data.details.join(", ");
+          }
+        }
+        
         Swal.fire({
           title: "Error!",
-          text: data.error || "Failed to update category",
+          text: errorMessage,
           icon: "error",
         });
       }
     } catch (error) {
+      console.error("Edit category error:", error);
       Swal.fire({
         title: "Error!",
-        text: "Server Error",
+        text: "Server Error. Please try again.",
         icon: "error",
       });
     }

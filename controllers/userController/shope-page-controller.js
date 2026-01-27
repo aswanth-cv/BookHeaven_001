@@ -1,5 +1,6 @@
 const Product = require('../../models/productSchema');
 const Category = require('../../models/categorySchema');
+const Wishlist = require('../../models/wishlistSchema');
 const { getActiveOfferForProduct, calculateDiscount } = require('../../utils/offer-helper');
 const { HttpStatus } = require("../../helpers/status-code");
 
@@ -9,6 +10,16 @@ const shopPage = async (req, res) => {
     const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
     
+    const userId = req.session.user_id;
+    
+    // Get user's wishlist if authenticated
+    let userWishlistProductIds = [];
+    if (userId) {
+      const wishlist = await Wishlist.findOne({ user: userId });
+      if (wishlist && wishlist.items) {
+        userWishlistProductIds = wishlist.items.map(item => item.product.toString());
+      }
+    }
 
     const searchQuery = req.query.search || '';
     let query = {
@@ -65,7 +76,7 @@ const shopPage = async (req, res) => {
 
     const paginatedProducts = allProducts.slice(skip, skip + limit);
 
-    // Apply offers to products
+    // Apply offers to products and mark wishlist status
     for (const product of paginatedProducts) {
       const offer = await getActiveOfferForProduct(
         product._id,
@@ -88,6 +99,9 @@ const shopPage = async (req, res) => {
         product.discountAmount = 0;
         product.discountPercentage = 0;
       }
+      
+      // Mark if product is in user's wishlist
+      product.isWishlisted = userWishlistProductIds.includes(product._id.toString());
     }
 
     const paginationData = {

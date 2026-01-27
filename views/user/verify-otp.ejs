@@ -244,9 +244,9 @@
 
       if (data.success) {
         clearInterval(timerId);
-        showStatus('OTP verified successfully! Redirecting...', 'success');
+        showStatus('Account created successfully! Logging you in...', 'success');
         setTimeout(() => {
-          window.location.href = '/login';
+          window.location.href = '/';
         }, 2000);
       } else {
         showStatus(data.message || 'Invalid OTP. Please try again.', 'error');

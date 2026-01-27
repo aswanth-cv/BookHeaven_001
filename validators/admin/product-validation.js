@@ -327,6 +327,53 @@ document.addEventListener("DOMContentLoaded", function() {
     };
   }
 
+  // Validate that all sub-images are required for new products
+  async function validateAllSubImages(subImages, isEditForm) {
+    if (isEditForm) {
+      // For edit form, validate only uploaded images
+      let allValid = true;
+      for (const img of subImages) {
+        if (img.files.length > 0) {
+          const isValid = await validateImageUpload(img, false);
+          if (!isValid) {
+            allValid = false;
+          }
+        }
+      }
+      return allValid;
+    } else {
+      // For new products, all 3 sub-images are required
+      let allValid = true;
+      let uploadedCount = 0;
+      
+      for (const img of subImages) {
+        if (img.files.length > 0) {
+          uploadedCount++;
+          const isValid = await validateImageUpload(img, true);
+          if (!isValid) {
+            allValid = false;
+          }
+        } else {
+          showError(img, 'This sub-image is required');
+          allValid = false;
+        }
+      }
+      
+      if (uploadedCount !== 3) {
+        // Show error on first empty sub-image
+        for (const img of subImages) {
+          if (img.files.length === 0) {
+            showError(img, 'All 3 sub-images are required for product creation');
+            break;
+          }
+        }
+        allValid = false;
+      }
+      
+      return allValid;
+    }
+  }
+
   const debouncedImageValidation = debounce(async (input, isRequired) => {
     await validateImageUpload(input, isRequired);
   }, 300);
@@ -339,8 +386,17 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById('subImage3')
   ];
 
-  subImages.forEach(img => {
-    img.addEventListener('change', () => debouncedImageValidation(img, false));
+  // Add validation for sub-images with required check for new products
+  subImages.forEach((img, index) => {
+    img.addEventListener('change', () => {
+      if (!isEditForm) {
+        // For new products, sub-images are required
+        debouncedImageValidation(img, true);
+      } else {
+        // For edit form, sub-images are optional
+        debouncedImageValidation(img, false);
+      }
+    });
   });
 
   productForm.addEventListener('submit', async function(e) {
@@ -373,16 +429,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
       isValid = validateDate(publishedDate) && isValid;
 
+      // Validate images
       if (!isEditForm) {
         isValid = await validateImageUpload(mainImage, true) && isValid;
+        // Validate all sub-images are required for new products
+        isValid = await validateAllSubImages(subImages, isEditForm) && isValid;
       } else if (mainImage.files.length > 0) {
         isValid = await validateImageUpload(mainImage, false) && isValid;
-      }
-
-      for (const img of subImages) {
-        if (img.files.length > 0) {
-          isValid = await validateImageUpload(img, false) && isValid;
-        }
+        // For edit form, validate only uploaded sub-images
+        isValid = await validateAllSubImages(subImages, isEditForm) && isValid;
       }
 
       if (isValid) {

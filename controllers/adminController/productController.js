@@ -93,14 +93,19 @@ const addProduct = async (req, res) => {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'Main image is required' });
     }
 
+    // Validate that all 3 sub-images are provided
+    if (!req.files || !req.files.subImages || req.files.subImages.length !== 3) {
+      return res.status(HttpStatus.BAD_REQUEST).json({ 
+        error: 'All three sub-images are required. Please upload exactly 3 sub-images.' 
+      });
+    }
+
     const subImages = [];
     const processedPaths = new Set(); 
-    if (req.files && req.files.subImages && req.files.subImages.length > 0) {
-      for (const file of req.files.subImages) {
-        let pathname = '/uploads/' + file.filename
-        subImages.push(pathname);
-        processedPaths.add(pathname);
-      }
+    for (const file of req.files.subImages) {
+      let pathname = '/uploads/' + file.filename
+      subImages.push(pathname);
+      processedPaths.add(pathname);
     }
 
 
@@ -175,7 +180,6 @@ const getEditProduct = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
-  console.log('Update request received for productId:', req.params.id);
   try {
     const productId = req.params.id;
     const {
@@ -219,8 +223,6 @@ const updateProduct = async (req, res) => {
     const newSubImages = [];
     const processedPaths = new Set(OldsubImages);
 
-    console.log( req.files.subImages);
-    
     if (req.files && req.files.subImages && req.files.subImages.length > 0) {
       for (const file of req.files.subImages) {
         
@@ -236,13 +238,6 @@ const updateProduct = async (req, res) => {
     }
 
     const updatedSubImages = [...newSubImages, ...OldsubImages].slice(0, 3);
-
-
-    console.log(updatedSubImages);
-    
-
-
-
 
     product.title = title;
     product.author = author;

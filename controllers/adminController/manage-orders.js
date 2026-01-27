@@ -3,7 +3,7 @@ const User = require("../../models/userSchema");
 const Product = require("../../models/productSchema");
 const { HttpStatus } = require("../../helpers/status-code");
 
-const { processReturnRefund } = require("../../controllers/userController/walletController");
+const { processReturnRefund, processCancelRefund } = require("../../controllers/userController/walletController");
 const { calculateExactRefundAmount } = require("../../helpers/money-calculator");
 
 
@@ -349,12 +349,26 @@ const updateOrderStatus = async (req, res) => {
       }
     } else if (status === "Cancelled") {
       order.cancelledAt = now
+      
+      // Process actual refund for cancelled orders
       if (order.paymentMethod === "COD") {
-        order.paymentStatus = "Failed"
+        const wasDeliveredAndPaid = order.paymentStatus === "Paid" ||
+                                    order.orderStatus === "Delivered" ||
+                                    order.deliveredAt;
+        
+        if (wasDeliveredAndPaid) {
+          // Process refund for COD orders that were delivered and paid
+          const refundProcessed = await processCancelRefund(order.user, order);
+          order.paymentStatus = refundProcessed ? "Refunded" : "Refund Failed";
+        } else {
+          order.paymentStatus = "Failed";
+        }
       } else if (order.paymentStatus === "Paid") {
-        order.paymentStatus = "Refund Initiated" 
+        // Process refund for online payments (UPI, Card, Wallet)
+        const refundProcessed = await processCancelRefund(order.user, order);
+        order.paymentStatus = refundProcessed ? "Refunded" : "Refund Failed";
       } else if (order.paymentStatus === "Pending") {
-        order.paymentStatus = "Failed" 
+        order.paymentStatus = "Failed";
       }
     }
 
@@ -444,6 +458,9 @@ const updateItemStatus = async (req, res) => {
     }
 
     if (status === "Cancelled" || status === "Returned") {
+      // Process actual refund to user's wallet
+      let refundProcessed = false;
+      
       if (order.paymentMethod === "COD") {
         const wasDeliveredAndPaid = order.paymentStatus === "Paid" ||
                                     order.orderStatus === "Delivered" ||
@@ -455,10 +472,17 @@ const updateItemStatus = async (req, res) => {
                                     );
 
         if (wasDeliveredAndPaid) {
-          if (!hasActiveItems && !hasReturnRequestedItems) {
-            order.paymentStatus = status === "Cancelled" ? "Refunded" : "Refunded";
+          // Process refund for COD orders that were delivered and paid
+          refundProcessed = await processCancelRefund(order.user, order, itemId);
+          
+          if (refundProcessed) {
+            if (!hasActiveItems && !hasReturnRequestedItems) {
+              order.paymentStatus = "Refunded";
+            } else {
+              order.paymentStatus = "Partially Refunded";
+            }
           } else {
-            order.paymentStatus = "Partially Refunded";
+            order.paymentStatus = "Refund Failed";
           }
         } else {
           if (!hasActiveItems && !hasReturnRequestedItems) {
@@ -466,11 +490,18 @@ const updateItemStatus = async (req, res) => {
           }
         }
       } else {
+        // Process refund for online payments (UPI, Card, Wallet)
         if (order.paymentStatus === "Paid" || order.paymentStatus === "Partially Refunded") {
-          if (!hasActiveItems && !hasReturnRequestedItems) {
-            order.paymentStatus = "Refunded";
+          refundProcessed = await processCancelRefund(order.user, order, itemId);
+          
+          if (refundProcessed) {
+            if (!hasActiveItems && !hasReturnRequestedItems) {
+              order.paymentStatus = "Refunded";
+            } else {
+              order.paymentStatus = "Partially Refunded";
+            }
           } else {
-            order.paymentStatus = "Partially Refunded";
+            order.paymentStatus = "Refund Failed";
           }
         } else if (order.paymentStatus === "Pending" && !hasActiveItems && !hasReturnRequestedItems) {
           order.paymentStatus = "Failed";

@@ -1,8 +1,4 @@
-/**
- * Centralized Error Messages Enum
- * This file contains all error messages used throughout the application
- * to ensure consistency and easy maintenance.
- */
+
 
 const ErrorMessages = Object.freeze({
   // Authentication & Authorization

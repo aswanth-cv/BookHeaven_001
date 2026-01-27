@@ -51,15 +51,19 @@ const addCategory = async (req, res) => {
       });
     }
 
-    let imageUrl = "";
-    if (req.file) {
-       imageUrl = '/uploads/' + req.file.filename;
+    // Check if image is provided
+    if (!req.file) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        error: "Category image is required. Please upload an image."
+      });
     }
+
+    const imageUrl = '/uploads/' + req.file.filename;
 
     const category = new Category({
       name,
       description,
-      image: imageUrl ? imageUrl : null,
+      image: imageUrl,
       isListed: isListed === "on",
     });
 
@@ -67,6 +71,16 @@ const addCategory = async (req, res) => {
     res.status(HttpStatus.CREATED).json({ message: "Category added successfully" });
   } catch (error) {
     console.error("Error adding category:", error);
+    
+    // Provide more specific error messages
+    if (error.name === 'ValidationError') {
+      const errorMessages = Object.values(error.errors).map(err => err.message);
+      return res.status(HttpStatus.BAD_REQUEST).json({ 
+        error: "Validation failed", 
+        details: errorMessages 
+      });
+    }
+    
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: "Server Error" });
   }
 };
@@ -86,27 +100,50 @@ const editCategory = async (req, res) => {
       _id: { $ne: id }
     });
     if (existingCategory) {
-
       return res.status(HttpStatus.OK).json({
         warning: true,
         message: "Another category with this name already exists."
       });
     }
 
-    let imageUrl = "";
-    if (req.file) {
-       imageUrl = '/uploads/' + req.file.filename;
-    }
-
+    // Update basic fields
     category.name = name;
     category.description = description;
-    category.image = imageUrl;
     category.isListed = isListed === "on";
+
+    // Only update image if a new file is uploaded
+    if (req.file) {
+      // Delete old image file if it exists
+      if (category.image && category.image.startsWith('/uploads/')) {
+        const oldImagePath = `public${category.image}`;
+        try {
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlinkSync(oldImagePath);
+          }
+        } catch (fileError) {
+          console.warn("Could not delete old image file:", fileError.message);
+        }
+      }
+      
+      // Set new image
+      category.image = '/uploads/' + req.file.filename;
+    }
+    // If no new file is uploaded, keep the existing image
 
     await category.save();
     res.json({ message: "Category updated successfully" });
   } catch (error) {
     console.error("Error editing category:", error);
+    
+    // Provide more specific error messages
+    if (error.name === 'ValidationError') {
+      const errorMessages = Object.values(error.errors).map(err => err.message);
+      return res.status(HttpStatus.BAD_REQUEST).json({ 
+        error: "Validation failed", 
+        details: errorMessages 
+      });
+    }
+    
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: "Server Error" });
   }
 };
