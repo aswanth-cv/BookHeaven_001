@@ -42,7 +42,7 @@
     color: #000;
   }
 
-  /* Remove square border/outline for wishlist button on shop page only */
+  /* Wishlist button styles */
   .btn-wishlist-shop {
     background: transparent;
     border: none;
@@ -53,6 +53,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    transition: all 0.2s ease;
   }
   .btn-wishlist-shop:focus,
   .btn-wishlist-shop:active {
@@ -63,6 +64,59 @@
   }
   .btn-wishlist-shop i {
     font-size: 1.1rem;
+    transition: all 0.2s ease;
+  }
+  
+  /* Wishlist states */
+  .btn-wishlist-shop .ri-heart-line {
+    color: #6b7280;
+  }
+  .btn-wishlist-shop .ri-heart-fill {
+    color: #dc3545;
+  }
+  .btn-wishlist-shop:hover .ri-heart-line {
+    color: #dc3545;
+  }
+  .btn-wishlist-shop:hover .ri-heart-fill {
+    color: #b91c1c;
+  }
+  
+  /* Wishlist indicator for wishlisted products */
+  .product-card.wishlisted {
+    position: relative;
+  }
+  .product-card.wishlisted::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px solid #dc3545;
+    border-radius: 0.375rem;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.3;
+  }
+  
+  /* Wishlist badge */
+  .wishlist-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: #dc3545;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .wishlist-badge i {
+    font-size: 0.8rem;
   }
 </style>
 
@@ -205,7 +259,7 @@
                    data-price="<%= product.finalPrice %>"
                    data-date="<%= new Date(product.createdAt).getTime() %>"
                    data-stock="<%= product.stock %>">
-                <div class="product-card bg-white h-100">
+                <div class="product-card bg-white h-100 <%= product.isWishlisted ? 'wishlisted' : '' %>">
                   <div class="product-image-container">
                     <%
                       const now = new Date();
@@ -221,6 +275,14 @@
                       <span class="offer-badge"><%= product.discountPercentage %>% OFF</span>
                     <% } %>
 
+                    <!-- Wishlist Badge -->
+                    <% if (product.isWishlisted) { %>
+                      <span class="wishlist-badge">
+                        <i class="ri-heart-fill"></i>
+                        Wishlisted
+                      </span>
+                    <% } %>
+
                     <!-- Stock Labels -->
                     <% if (product.stock === 0) { %>
                       <span class="stock-label out-of-stock">Out of Stock</span>
@@ -229,7 +291,7 @@
                     <% } %>
 
                     <a href="/products/<%= product._id %>" class="text-decoration-none">
-                      <img src="<%= product.mainImage || '/api/placeholder/500/600' %>" alt="<%= product.title %>" class="product-image" />
+                      <img src="<%= product.mainImage || '/api/placeholder/500/600?type=book' %>" alt="<%= product.title %>" class="product-image" />
                     </a>
                   </div>
                   <div class="p-3">
@@ -248,9 +310,15 @@
                         <% } %> 
                       </div>
                       <div class="d-flex gap-2 align-items-center">
-                        <button class="btn-wishlist-shop" data-product-id="<%= product._id %>">
-                          <i class="ri-heart-line"></i>
-                        </button>
+                        <% if (locals.isAuthenticated) { %>
+                          <button class="btn-wishlist-shop" data-product-id="<%= product._id %>">
+                            <i class="<%= product.isWishlisted ? 'ri-heart-fill text-danger' : 'ri-heart-line' %>"></i>
+                          </button>
+                        <% } else { %>
+                          <a href="/login" class="btn-wishlist-shop" title="Login to add to wishlist">
+                            <i class="ri-heart-line"></i>
+                          </a>
+                        <% } %>
                         <button class="add-to-cart border-0" data-product-id="<%= product._id %>" <%= product.stock === 0 ? 'disabled' : '' %>>
                           <i class="ri-shopping-cart-line"></i>
                         </button>
@@ -626,10 +694,16 @@
           e.preventDefault();
           const productId = wishBtn.getAttribute('data-product-id');
           if (!productId) return;
+          
+          // Find the product card
+          const productCard = wishBtn.closest('.product-card');
+          const productItem = wishBtn.closest('.product-item');
+          
           wishBtn.disabled = true;
           const icon = wishBtn.querySelector('i');
           const hadFill = icon && icon.classList.contains('ri-heart-fill');
           if (icon) icon.className = 'ri-loader-4-line ri-spin';
+          
           try {
             const resp = await postJson('/wishlist/toggle', { productId });
             if (resp.status === 401 && resp.data && resp.data.requiresAuth) {
@@ -639,8 +713,47 @@
             if (resp.ok && resp.data && resp.data.success) {
               updateCount(wishlistCountElement, resp.data.wishlistCount);
               const isWishlisted = !!resp.data.isWishlisted;
-              if (icon) icon.className = isWishlisted ? 'ri-heart-fill text-danger' : 'ri-heart-line';
-              // if (window.Swal) Swal.fire({ icon: 'success', title: resp.data.message || (isWishlisted ? 'Added to wishlist' : 'Removed from wishlist'), timer: 1200, showConfirmButton: false });
+              
+              // Update heart icon
+              if (icon) {
+                icon.className = isWishlisted ? 'ri-heart-fill text-danger' : 'ri-heart-line';
+              }
+              
+              // Update product card visual state
+              if (productCard) {
+                if (isWishlisted) {
+                  productCard.classList.add('wishlisted');
+                  
+                  // Add wishlist badge if it doesn't exist
+                  const imageContainer = productCard.querySelector('.product-image-container');
+                  if (imageContainer && !imageContainer.querySelector('.wishlist-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'wishlist-badge';
+                    badge.innerHTML = '<i class="ri-heart-fill"></i> Wishlisted';
+                    imageContainer.appendChild(badge);
+                  }
+                } else {
+                  productCard.classList.remove('wishlisted');
+                  
+                  // Remove wishlist badge
+                  const badge = productCard.querySelector('.wishlist-badge');
+                  if (badge) {
+                    badge.remove();
+                  }
+                }
+              }
+              
+              // Show success message
+              if (window.Swal) {
+                Swal.fire({ 
+                  icon: 'success', 
+                  title: isWishlisted ? 'Added to wishlist' : 'Removed from wishlist', 
+                  timer: 1200, 
+                  showConfirmButton: false,
+                  toast: true,
+                  position: 'top-end'
+                });
+              }
             } else {
               const msg = (resp.data && resp.data.message) || 'Failed to update wishlist';
               if (icon) icon.className = hadFill ? 'ri-heart-fill text-danger' : 'ri-heart-line';

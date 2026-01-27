@@ -23,10 +23,10 @@
           <!-- Thumbnails - Vertical on left side -->
           <div class="col-2">
             <div class="d-flex flex-column thumbnails-container">
-              <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Cover" class="thumbnail active" data-image="<%= product.mainImage || '/api/placeholder/600/800' %>" onclick="changeImage(this, this.dataset.image)" />
+              <img src="<%= product.mainImage || '/api/placeholder/600/800?type=book' %>" alt="<%= product.title %> - Cover" class="thumbnail active" data-image="<%= product.mainImage || '/api/placeholder/600/800?type=book' %>" onclick="changeImage(this, this.dataset.image)" />
               <% if (product.subImages && product.subImages.length > 0) { %>
                 <% product.subImages.forEach((subImage, index) => { %>
-                  <img src="<%= subImage || '/api/placeholder/600/800' %>" alt="<%= product.title %> - Image <%= index + 1 %>" class="thumbnail" data-image="<%= subImage || '/api/placeholder/600/800' %>" onclick="changeImage(this, this.dataset.image)" />
+                  <img src="<%= subImage || '/api/placeholder/600/800?type=book' %>" alt="<%= product.title %> - Image <%= index + 1 %>" class="thumbnail" data-image="<%= subImage || '/api/placeholder/600/800?type=book' %>" onclick="changeImage(this, this.dataset.image)" />
                 <% }) %>
               <% } %>
             </div>
@@ -38,7 +38,7 @@
               <% if (product.activeOffer && product.discountPercentage > 0) { %>
                 <span class="offer-badge"><%= product.discountPercentage %>% OFF</span>
               <% } %>
-              <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %>" class="main-image" id="mainImage" />
+              <img src="<%= product.mainImage || '/api/placeholder/600/800?type=book' %>" alt="<%= product.title %>" class="main-image" id="mainImage" />
             </div>
           </div>
         </div>

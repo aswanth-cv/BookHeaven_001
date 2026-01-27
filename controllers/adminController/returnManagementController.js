@@ -251,8 +251,6 @@ const processReturnRequest = async (req, res) => {
     const preHasReturnRequestedItems = returnRequestedItems.length > 0;
 
     const now = new Date();
-    console.log('Return requested items:', returnRequestedItems.map(i => ({ id: i._id?.toString(), product: i.product, qty: i.quantity })));
-
     const returnedItems = [];
 
     for (const item of returnRequestedItems) {
@@ -300,12 +298,6 @@ const processReturnRequest = async (req, res) => {
     }
 
     if (approved) {
-      console.log('Processing return refund for order:', orderId, {
-        paymentStatus: order.paymentStatus,
-        userId: order.user,
-        returnedCount: returnedItems.length
-      });
-
       let refundProcessed = false;
 
       if (order.paymentMethod === 'COD') {

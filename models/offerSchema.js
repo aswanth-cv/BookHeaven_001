@@ -85,6 +85,16 @@ offerSchema.pre("validate", function (next) {
     return next(new Error("Fixed discount must be greater than 0."))
   }
 
+  // **CRITICAL: Prevent flat amount offers from being applied globally**
+  if (this.discountType === "fixed") {
+    if (this.appliesTo === "all_products") {
+      return next(new Error("Flat amount discounts cannot be applied to all products. Please select specific products or use percentage discount."))
+    }
+    if (this.appliesTo === "all_categories") {
+      return next(new Error("Flat amount discounts cannot be applied to all categories. Please select specific categories or use percentage discount."))
+    }
+  }
+
   // Validate specific products/categories
   if (this.appliesTo === "specific_products" && (!this.applicableProducts || this.applicableProducts.length === 0)) {
     return next(new Error("Please select at least one product for a product-specific offer."))

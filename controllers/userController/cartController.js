@@ -2,7 +2,7 @@ const { default: mongoose, Types } = require("mongoose");
 const Cart = require("../../models/cartSchema");
 const Product = require("../../models/productSchema");
 const Wishlist = require("../../models/wishlistSchema");
-const { getActiveOfferForProduct, calculateDiscount } = require("../../utils/offer-helper");
+const { getActiveOfferForProduct, calculateDiscount, isOfferActive, recalculateCartTotals } = require("../../utils/offer-helper");
 const { HttpStatus } = require("../../helpers/status-code");
 const { ErrorMessages } = require("../../helpers/error-messages");
 
@@ -156,11 +156,9 @@ const addToCart = async (req, res) => {
         .json({ success: false, message: "Product not found or unavailable" });
     }
 
-   
-   const finalPrice = product.salePrice || product.regularPrice || 0;
+    // Use current product price
+    const currentPrice = product.salePrice || product.regularPrice || 0;
 
-
-    
     let cart = await Cart.findOne({ user: userId });
     let existingQuantity = 0;
     const MAX_QUANTITY_PER_PRODUCT = 5;
@@ -199,6 +197,19 @@ const addToCart = async (req, res) => {
       });
     }
 
+    // Get active offer for this product
+    const offer = await getActiveOfferForProduct(
+      productId,
+      product.category,
+      currentPrice
+    );
+
+    let finalPriceForCart = currentPrice;
+    if (offer && isOfferActive(offer)) {
+      const { finalPrice } = calculateDiscount(offer, currentPrice);
+      finalPriceForCart = finalPrice;
+    }
+
     if (!cart) {
       cart = new Cart({
         user: userId,
@@ -206,10 +217,10 @@ const addToCart = async (req, res) => {
           {
             product: productId,
             quantity: parseInt(quantity),
-            priceAtAddition: finalPrice,
+            priceAtAddition: currentPrice, // Store original price for reference
           },
         ],
-        totalAmount: parseInt(quantity) * finalPrice,
+        totalAmount: parseInt(quantity) * finalPriceForCart, // Use discounted price for total
       });
     } else {
       const matchingIndices = [];
@@ -220,7 +231,7 @@ const addToCart = async (req, res) => {
       if (matchingIndices.length > 0) {
         const keepIndex = matchingIndices[0];
         cart.items[keepIndex].quantity = totalQuantity;
-        cart.items[keepIndex].priceAtAddition = finalPrice;
+        cart.items[keepIndex].priceAtAddition = currentPrice; // Update to current price
         for (let i = matchingIndices.length - 1; i > 0; i--) {
           cart.items.splice(matchingIndices[i], 1);
         }
@@ -228,22 +239,27 @@ const addToCart = async (req, res) => {
         cart.items.push({
           product: productId,
           quantity: parseInt(quantity),
-          priceAtAddition: finalPrice,
+          priceAtAddition: currentPrice,
         });
       }
 
-      cart.totalAmount = cart.items.reduce(
-        (sum, item) => sum + item.quantity * item.priceAtAddition,
-        0
-      );
+      // Recalculate total with current offers
+      const cartTotals = await recalculateCartTotals(cart);
+      cart.totalAmount = cartTotals.totalAmount;
     }
 
    
     await cart.save();
 
-    const cartCount = cart.items.length;
+    const cartCount = cart.items.length; // Number of unique items
 
-    res.json({ success: true, message: "Added to cart", cartCount });
+    res.json({ 
+      success: true, 
+      message: offer && isOfferActive(offer) ? "Added to cart with offer applied!" : "Added to cart", 
+      cartCount,
+      hasOffer: !!(offer && isOfferActive(offer)),
+      offerTitle: offer && isOfferActive(offer) ? offer.title : null
+    });
   } catch (error) {
     console.log("Error adding to cart:", error);
     res
@@ -263,7 +279,7 @@ const updateCartItem = async (req, res) => {
     const userId = req.session.user_id;
     const { productId, quantity } = req.body;
 
-    const cart = await Cart.findOne({ user: userId });
+    const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart) {
       return res
         .status(HttpStatus.NOT_FOUND)
@@ -271,7 +287,7 @@ const updateCartItem = async (req, res) => {
     }
 
     const itemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === productId
+      (item) => item.product._id.toString() === productId
     );
     if (itemIndex === -1) {
       return res
@@ -310,40 +326,64 @@ const updateCartItem = async (req, res) => {
         });
     }
 
-    const finalPrice = product.salePrice || product.regularPrice;
+    const currentPrice = product.salePrice || product.regularPrice;
     
     // Get active offer for updated pricing
     const offer = await getActiveOfferForProduct(
       product._id,
       product.category,
-      finalPrice
+      currentPrice
     );
     
-    let discountedPrice = finalPrice;
-    if (offer) {
-      const { finalPrice: offerPrice } = calculateDiscount(offer, finalPrice);
-      discountedPrice = offerPrice;
+    let discountedPrice = currentPrice;
+    let discountAmount = 0;
+    let discountPercentage = 0;
+    let offerExpired = false;
+    
+    if (offer && isOfferActive(offer)) {
+      const discountResult = calculateDiscount(offer, currentPrice);
+      discountedPrice = discountResult.finalPrice;
+      discountAmount = discountResult.discountAmount;
+      discountPercentage = discountResult.discountPercentage;
+    } else if (offer && !isOfferActive(offer)) {
+      // Offer has expired
+      offerExpired = true;
     }
 
+    // Update the cart item with current price
     cart.items[itemIndex].quantity = parseInt(quantity);
-    cart.items[itemIndex].priceAtAddition = finalPrice;
-    cart.totalAmount = cart.items.reduce(
-      (sum, item) => sum + item.quantity * item.priceAtAddition,
-      0
-    );
+    cart.items[itemIndex].priceAtAddition = currentPrice;
+    
+    // Recalculate totals for entire cart with fresh offer lookups
+    const cartTotals = await recalculateCartTotals(cart);
+    const totalAmount = cartTotals.totalAmount;
+    const totalDiscount = cartTotals.totalDiscount;
+    const totalItemCount = cartTotals.itemCount;
 
+    cart.totalAmount = totalAmount;
     await cart.save();
 
-    res.json({
+    // Prepare response with detailed pricing information
+    const response = {
       success: true,
-      message: "Cart updated",
-      totalAmount: cart.totalAmount,
-      itemTotal: cart.items[itemIndex].quantity * discountedPrice, // Use discounted price for display
-      originalItemTotal: cart.items[itemIndex].quantity * finalPrice,
-      cartCount: cart.items.length,
-      hasOffer: !!offer,
-      discountPercentage: offer ? calculateDiscount(offer, finalPrice).discountPercentage : 0
-    });
+      message: offerExpired ? "Cart updated (offer expired)" : "Cart updated",
+      totalAmount: totalAmount,
+      totalDiscount: totalDiscount,
+      itemTotal: quantity * discountedPrice, // Final price after discount for this item
+      originalItemTotal: quantity * currentPrice, // Original price before discount for this item
+      itemOriginalPrice: currentPrice, // Per unit original price
+      itemDiscountedPrice: discountedPrice, // Per unit discounted price
+      itemDiscountAmount: discountAmount, // Per unit discount amount
+      cartCount: cart.items.length, // Number of unique items, not total quantity
+      hasOffer: !!offer && isOfferActive(offer),
+      discountPercentage: discountPercentage,
+      offerTitle: offer && isOfferActive(offer) ? offer.title : null,
+      offerValid: !!offer && isOfferActive(offer),
+      offerExpired: offerExpired,
+      priceChanged: cart.items[itemIndex].priceAtAddition !== currentPrice
+    };
+
+    res.json(response);
   } catch (error) {
     console.log("Error updating cart item:", error);
     res
@@ -373,20 +413,20 @@ const removeCartItem = async (req, res) => {
     cart.items = cart.items.filter(
       (item) => item.product.toString() !== productId
     );
-    cart.totalAmount = cart.items.reduce(
-      (sum, item) => sum + item.quantity * item.priceAtAddition,
-      0
-    );
+    // Recalculate totals with current offers
+    const cartTotals = await recalculateCartTotals(cart);
+    cart.totalAmount = cartTotals.totalAmount;
 
     await cart.save();
 
-    const cartCount = cart.items.length;
+    const cartCount = cart.items.length; // Number of unique items
 
     res.json({
       success: true,
       message: "Item removed",
       cartCount,
-      totalAmount: cart.totalAmount,
+      totalAmount: cartTotals.totalAmount,
+      totalDiscount: cartTotals.totalDiscount,
     });
   } catch (error) {
     console.log("Error removing cart item:", error);
@@ -452,8 +492,21 @@ const addFromWishlist = async (req, res) => {
       });
     }
 
-    const finalPrice = product.salePrice || product.regularPrice || 0;
+    const currentPrice = product.salePrice || product.regularPrice || 0;
     const MAX_QUANTITY_PER_PRODUCT = 5;
+
+    // Get active offer for this product
+    const offer = await getActiveOfferForProduct(
+      productId,
+      product.category,
+      currentPrice
+    );
+
+    let finalPriceForCart = currentPrice;
+    if (offer && isOfferActive(offer)) {
+      const { finalPrice } = calculateDiscount(offer, currentPrice);
+      finalPriceForCart = finalPrice;
+    }
 
     let cart = await Cart.findOne({ user: userId });
     let existingQuantity = 0;
@@ -497,9 +550,9 @@ const addFromWishlist = async (req, res) => {
         items: [{
           product: productId,
           quantity: quantity,
-          priceAtAddition: finalPrice,
+          priceAtAddition: currentPrice,
         }],
-        totalAmount: quantity * finalPrice,
+        totalAmount: quantity * finalPriceForCart,
       });
     } else {
       const matchingIndices = [];
@@ -510,7 +563,7 @@ const addFromWishlist = async (req, res) => {
       if (matchingIndices.length > 0) {
         const keepIndex = matchingIndices[0];
         cart.items[keepIndex].quantity = totalQuantity;
-        cart.items[keepIndex].priceAtAddition = finalPrice;
+        cart.items[keepIndex].priceAtAddition = currentPrice;
         
         for (let i = matchingIndices.length - 1; i > 0; i--) {
           cart.items.splice(matchingIndices[i], 1);
@@ -519,19 +572,18 @@ const addFromWishlist = async (req, res) => {
         cart.items.push({
           product: productId,
           quantity: quantity,
-          priceAtAddition: finalPrice,
+          priceAtAddition: currentPrice,
         });
       }
 
-      cart.totalAmount = cart.items.reduce(
-        (sum, item) => sum + item.quantity * item.priceAtAddition,
-        0
-      );
+      // Recalculate totals with current offers
+      const cartTotals = await recalculateCartTotals(cart);
+      cart.totalAmount = cartTotals.totalAmount;
     }
 
     await cart.save();
 
-    const cartCount = cart.items.length;
+    const cartCount = cart.items.length; // Number of unique items
 
 
     return res.status(HttpStatus.OK).json({

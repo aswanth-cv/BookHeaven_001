@@ -368,7 +368,7 @@ const getOrderDetails = async (req, res) => {
         id: userId,
         fullName: user.fullName || 'User',
         email: user.email || '',
-        profileImage: user.profileImage || '/api/placeholder/120/120'
+        profileImage: user.profileImage || '/api/placeholder/120/120?type=profile'
       },
       isAuthenticated: true
     });
@@ -439,7 +439,7 @@ const getOrderSuccess = async (req, res) => {
         id: userId,
         fullName: user.fullName || 'User',
         email: user.email || '',
-        profileImage: user.profileImage || '/api/placeholder/120/120'
+        profileImage: user.profileImage || '/api/placeholder/120/120?type=profile'
       },
       isAuthenticated: true
     });

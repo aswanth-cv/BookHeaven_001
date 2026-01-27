@@ -74,7 +74,7 @@ const postSignup = async (req, res) => {
     }
 
     const otp = otpGenerator();
-    console.log("Generated OTP:", otp);
+    console.log("OTP:",otp);
 
     const subjectContent = "Verify your email for Chapterless";
 
@@ -229,6 +229,10 @@ const verifyOtp = async (req, res) => {
     await OTP.deleteOne({ _id: otpDoc._id });
     delete req.session.tempUser;
 
+    // Automatically log the user in after successful signup
+    req.session.user_id = newUser._id;
+    req.session.user_email = newUser.email;
+
     return res.status(201).json({
       success: true,
       message: "Account created successfully",
@@ -254,7 +258,6 @@ const resendOtp = async (req, res) => {
     }
 
     const otp = otpGenerator();
-    console.log("Resending OTP:", otp);
 
     await OTP.deleteMany({ email, purpose: "signup" });
 

@@ -56,6 +56,16 @@ const validateOfferData = (data) => {
     errors.push("Fixed discount must be greater than 0");
   }
 
+  // **CRITICAL: Prevent flat amount offers from being applied globally**
+  if (data.discountType === "fixed") {
+    if (data.appliesTo === "all_products") {
+      errors.push("Flat amount discounts cannot be applied to all products. Please select specific products or use percentage discount for global offers.");
+    }
+    if (data.appliesTo === "all_categories") {
+      errors.push("Flat amount discounts cannot be applied to all categories. Please select specific categories or use percentage discount for global offers.");
+    }
+  }
+
   if (!data.startDate) {
     errors.push("Start date is required");
   }

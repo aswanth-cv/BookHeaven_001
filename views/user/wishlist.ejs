@@ -75,7 +75,7 @@
               <div class="row align-items-center">
                 <div class="col-md-2 col-4 mb-3 mb-md-0">
                   <div class="position-relative">
-                    <img src="<%= item.product.mainImage || '/api/placeholder/150/200' %>" alt="<%= item.product.title %>" class="img-fluid rounded" />
+                    <img src="<%= item.product.mainImage || '/api/placeholder/150/200?type=book' %>" alt="<%= item.product.title %>" class="img-fluid rounded" />
                     <% if (item.product.activeOffer && item.product.discountPercentage > 0) { %>
                       <span class="offer-badge"><%= item.product.discountPercentage %>% OFF</span>
                     <% } %>
@@ -191,7 +191,7 @@
               <% } %>
               
               <a href="/products/<%= product._id %>" class="text-decoration-none">
-                <img src="<%= product.mainImage || '/api/placeholder/600/800' %>" alt="<%= product.title %>" class="product-image" />
+                <img src="<%= product.mainImage || '/api/placeholder/600/800?type=book' %>" alt="<%= product.title %>" class="product-image" />
               </a>
             </div>
             <div class="p-3">

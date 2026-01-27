@@ -22,11 +22,15 @@ const getCoupons = async (req,res) =>{
     if (status !== 'all') {
       if (status === 'active') {
         query.isActive = true;
+        query.startDate = { $lte: new Date() };
         query.expiryDate = { $gte: new Date() };
       } else if (status === 'inactive') {
         query.isActive = false;
       } else if (status === 'expired') {
         query.expiryDate = { $lt: new Date() };
+      } else if (status === 'pending') {
+        query.isActive = true;
+        query.startDate = { $gt: new Date() };
       }
     }
 

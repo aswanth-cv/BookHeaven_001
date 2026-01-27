@@ -25,6 +25,7 @@
       <select class="form-select filter-select" id="statusFilter">
         <option value="all" <%= filters.status === 'all' ? 'selected' : '' %>>All Status</option>
         <option value="active" <%= filters.status === 'active' ? 'selected' : '' %>>Active</option>
+        <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
         <option value="inactive" <%= filters.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
         <option value="expired" <%= filters.status === 'expired' ? 'selected' : '' %>>Expired</option>
       </select>
@@ -55,8 +56,19 @@
           <% if (coupons && coupons.length > 0) { %>
             <% coupons.forEach(coupon => { %>
               <% 
-                const isExpired = new Date(coupon.expiryDate) < new Date();
-                const status = isExpired ? 'expired' : (coupon.isActive ? 'active' : 'inactive');
+                const currentDate = new Date();
+                const isExpired = new Date(coupon.expiryDate) < currentDate;
+                const isPending = new Date(coupon.startDate) > currentDate;
+                let status;
+                if (isExpired) {
+                  status = 'expired';
+                } else if (isPending && coupon.isActive) {
+                  status = 'pending';
+                } else if (coupon.isActive) {
+                  status = 'active';
+                } else {
+                  status = 'inactive';
+                }
               %>
               <tr data-coupon-id="<%= coupon._id %>">
                 <td class="coupon-code"><%= coupon.code %></td>
@@ -582,14 +594,19 @@
     color: #28a745;
   }
   
+  .status-badge.pending {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+  
   .status-badge.inactive {
     background-color: #f8f9fa;
     color: #6c757d;
   }
   
   .status-badge.expired {
-    background-color: #fff3cd;
-    color: #856404;
+    background-color: #ffebee;
+    color: #c62828;
   }
   
   .action-buttons {
@@ -680,8 +697,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.0.19/dist/sweetalert2.all.min.js"></script>
-<!-- Add validation script -->
+<!-- Add validation scripts -->
 <script src="/validators/admin/coupon-validation.js"></script>
+<script src="/js/add-coupon-validation.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Discount type toggle for Add Coupon Modal
@@ -893,8 +911,19 @@
             document.getElementById('viewUsage').textContent = `${coupon.usedCount} used / ${coupon.usageLimitGlobal || 'Unlimited'} total`;
             document.getElementById('viewUsageLimitPerUser').textContent = `${coupon.usageLimitPerUser} use${coupon.usageLimitPerUser > 1 ? 's' : ''} per user`;
             
-            const isExpired = new Date(coupon.expiryDate) < new Date();
-            const status = isExpired ? 'expired' : (coupon.isActive ? 'active' : 'inactive');
+            const currentDate = new Date();
+            const isExpired = new Date(coupon.expiryDate) < currentDate;
+            const isPending = new Date(coupon.startDate) > currentDate;
+            let status;
+            if (isExpired) {
+              status = 'expired';
+            } else if (isPending && coupon.isActive) {
+              status = 'pending';
+            } else if (coupon.isActive) {
+              status = 'active';
+            } else {
+              status = 'inactive';
+            }
             document.getElementById('viewStatus').innerHTML = `<span class="status-badge ${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>`;
             
             let appliesTo = [];
@@ -992,9 +1021,35 @@
     // Create coupon
     document.getElementById('createCouponBtn').addEventListener('click', function() {
       const form = document.getElementById('addCouponForm');
+      
+      // First check HTML5 validation
       if (!form.checkValidity()) {
         form.reportValidity();
         return;
+      }
+      
+      // Check custom validation using the new add-coupon-validation.js
+      if (typeof window.validateAddCouponForm === 'function') {
+        this.disabled = true;
+        this.innerHTML = '<i class="ri-loader-4-line"></i> Validating...';
+        
+        if (!window.validateAddCouponForm()) {
+          // Reset button state
+          this.disabled = false;
+          this.innerHTML = 'Create Coupon';
+          
+          // Focus the first invalid field
+          const firstInvalid = form.querySelector('.is-invalid');
+          if (firstInvalid) {
+            firstInvalid.focus();
+            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          
+          return;
+        }
+        
+        // Reset button text but keep disabled during submission
+        this.innerHTML = '<i class="ri-loader-4-line"></i> Creating...';
       }
 
       const couponData = {
