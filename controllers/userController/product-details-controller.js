@@ -17,6 +17,8 @@ const productDetails = async (req, res) => {
       return res.status(500).render("pageNotFound");
     }
 
+    
+
     // Apply offer to main product
     const offer = await getActiveOfferForProduct(
       product._id,
